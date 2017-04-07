@@ -28,7 +28,7 @@ enum ErrorCode {
 // The overall result of decoding a function or a module.
 template <typename T>
 struct Result {
-  Result() : val(), error_code(kSuccess), start(nullptr), error_pc(nullptr) {}
+  Result() : val(), error_code(kSuccess), error_offset(0) {}
   Result(Result&& other) { *this = std::move(other); }
   Result& operator=(Result&& other) {
     MoveFrom(other);
@@ -38,9 +38,7 @@ struct Result {
 
   T val;
   ErrorCode error_code;
-  const byte* start;
-  const byte* error_pc;
-  const byte* error_pt;
+  uint32_t error_offset;
   std::unique_ptr<char[]> error_msg;
 
   bool ok() const { return error_code == kSuccess; }
@@ -49,9 +47,7 @@ struct Result {
   template <typename V>
   void MoveFrom(Result<V>& that) {
     error_code = that.error_code;
-    start = that.start;
-    error_pc = that.error_pc;
-    error_pt = that.error_pt;
+    error_offset = that.error_offset;
     error_msg = std::move(that.error_msg);
   }
 
@@ -69,12 +65,7 @@ std::ostream& operator<<(std::ostream& os, const Result<T>& result) {
       os << "success (no value)";
     }
   } else if (result.error_msg.get() != nullptr) {
-    ptrdiff_t offset = result.error_pc - result.start;
-    if (offset < 0) {
-      os << result.error_msg.get() << " @" << offset;
-    } else {
-      os << result.error_msg.get() << " @+" << offset;
-    }
+    os << result.error_msg.get() << " @" << result.error_offset;
   } else {
     os << result.error_code;
   }
