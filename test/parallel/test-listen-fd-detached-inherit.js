@@ -21,15 +21,13 @@
 
 'use strict';
 const common = require('../common');
+if (common.isWindows)
+  common.skip('This test is disabled on windows.');
+
 const assert = require('assert');
 const http = require('http');
 const net = require('net');
 const spawn = require('child_process').spawn;
-
-if (common.isWindows) {
-  common.skip('This test is disabled on windows.');
-  return;
-}
 
 switch (process.argv[2]) {
   case 'child': return child();
@@ -37,7 +35,7 @@ switch (process.argv[2]) {
   default: return test();
 }
 
-// spawn the parent, and listen for it to tell us the pid of the child.
+// Spawn the parent, and listen for it to tell us the pid of the child.
 // WARNING: This is an example of listening on some arbitrary FD number
 // that has already been bound elsewhere in advance.  However, binding
 // server handles to stdio fd's is NOT a good or reliable way to do
@@ -50,12 +48,12 @@ function test() {
   let json = '';
   parent.stdout.on('data', function(c) {
     json += c.toString();
-    if (json.indexOf('\n') !== -1) next();
+    if (json.includes('\n')) next();
   });
   function next() {
     console.error('output from parent = %s', json);
     const child = JSON.parse(json);
-    // now make sure that we can request to the child, then kill it.
+    // Now make sure that we can request to the subprocess, then kill it.
     http.get({
       server: 'localhost',
       port: child.port,
@@ -66,12 +64,12 @@ function test() {
         s += c.toString();
       });
       res.on('end', function() {
-        // kill the child before we start doing asserts.
+        // kill the subprocess before we start doing asserts.
         // it's really annoying when tests leave orphans!
         process.kill(child.pid, 'SIGKILL');
         try {
           parent.kill();
-        } catch (e) {}
+        } catch {}
 
         assert.strictEqual(s, 'hello from child\n');
         assert.strictEqual(res.statusCode, 200);

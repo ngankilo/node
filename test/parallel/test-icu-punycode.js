@@ -1,18 +1,22 @@
 'use strict';
+// Flags: --expose-internals
 const common = require('../common');
 
-if (!common.hasIntl) {
+if (!common.hasIntl)
   common.skip('missing Intl');
-  return;
-}
 
-const icu = process.binding('icu');
+const { internalBinding } = require('internal/test/binding');
+const icu = internalBinding('icu');
 const assert = require('assert');
 
 const tests = require('../fixtures/url-idna.js');
+const fixtures = require('../common/fixtures');
+const wptToASCIITests = require(
+  fixtures.path('wpt', 'url', 'resources', 'toascii.json')
+);
 
 {
-  for (const [i, { ascii, unicode }] of tests.valid.entries()) {
+  for (const [i, { ascii, unicode }] of tests.entries()) {
     assert.strictEqual(ascii, icu.toASCII(unicode), `toASCII(${i + 1})`);
     assert.strictEqual(unicode, icu.toUnicode(ascii), `toUnicode(${i + 1})`);
     assert.strictEqual(ascii, icu.toASCII(icu.toUnicode(ascii)),
@@ -23,19 +27,24 @@ const tests = require('../fixtures/url-idna.js');
 }
 
 {
-  const errorRe = {
-    ascii: /^Error: Cannot convert name to ASCII$/,
-    unicode: /^Error: Cannot convert name to Unicode$/
-  };
-  const convertFunc = {
-    ascii: icu.toASCII,
-    unicode: icu.toUnicode
-  };
+  const errMessage = /^Error: Cannot convert name to ASCII$/;
 
-  for (const [i, { url, mode }] of tests.invalid.entries()) {
-    assert.throws(() => convertFunc[mode](url), errorRe[mode],
-                  `Invalid case ${i + 1}`);
-    assert.doesNotThrow(() => convertFunc[mode](url, true),
-                        `Invalid case ${i + 1} in lenient mode`);
+  for (const [i, test] of wptToASCIITests.entries()) {
+    if (typeof test === 'string')
+      continue; // skip comments
+    const { comment, input, output } = test;
+    let caseComment = `case ${i + 1}`;
+    if (comment)
+      caseComment += ` (${comment})`;
+    if (output === null) {
+      assert.throws(() => icu.toASCII(input),
+                    errMessage, `ToASCII ${caseComment}`);
+      icu.toASCII(input, true); // Should not throw.
+    } else {
+      assert.strictEqual(icu.toASCII(input), output, `ToASCII ${caseComment}`);
+      assert.strictEqual(icu.toASCII(input, true), output,
+                         `ToASCII ${caseComment} in lenient mode`);
+    }
+    icu.toUnicode(input); // Should not throw.
   }
 }

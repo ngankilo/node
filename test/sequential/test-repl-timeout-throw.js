@@ -1,5 +1,5 @@
 'use strict';
-const common = require('../common');
+require('../common');
 const assert = require('assert');
 
 const spawn = require('child_process').spawn;
@@ -13,6 +13,8 @@ child.stdout.setEncoding('utf8');
 child.stdout.on('data', function(c) {
   process.stdout.write(c);
   stdout += c;
+  if (stdout.includes('> THROW 2'))
+    child.stdin.end();
 });
 
 child.stdin.write = function(original) {
@@ -31,7 +33,7 @@ child.stdout.once('data', function() {
   setTimeout(fsTest, 50);
   function fsTest() {
     const f = JSON.stringify(__filename);
-    child.stdin.write('fs.readFile(' + f + ', thrower);\n');
+    child.stdin.write(`fs.readFile(${f}, thrower);\n`);
     setTimeout(eeTest, 50);
   }
 
@@ -46,8 +48,6 @@ child.stdout.once('data', function() {
                       '    });\n' +
                       '  });\n' +
                       '});"";\n');
-
-    setTimeout(child.stdin.end.bind(child.stdin), common.platformTimeout(200));
   }
 });
 

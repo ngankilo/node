@@ -29,20 +29,17 @@
 // correctly.
 
 const common = require('../common');
-const assert = require('assert');
-
-if (!common.hasCrypto) {
+if (!common.hasCrypto)
   common.skip('missing crypto');
-  return;
-}
+
+const assert = require('assert');
 const https = require('https');
 const tls = require('tls');
-
-const fs = require('fs');
+const fixtures = require('../common/fixtures');
 
 const options = {
-  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
-  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
+  key: fixtures.readKey('agent1-key.pem'),
+  cert: fixtures.readKey('agent1-cert.pem')
 };
 
 
@@ -78,7 +75,7 @@ server.listen(0, common.mustCall(function() {
     server.close();
     console.log('3) Client got response headers.');
 
-    assert.strictEqual('gws', res.headers.server);
+    assert.strictEqual(res.headers.server, 'gws');
 
     res.setEncoding('utf8');
     res.on('data', function(s) {
@@ -87,7 +84,7 @@ server.listen(0, common.mustCall(function() {
 
     res.on('end', common.mustCall(function() {
       console.log('5) Client got "end" event.');
-      assert.strictEqual('hello world\nhello world\n', bodyBuffer);
+      assert.strictEqual(bodyBuffer, 'hello world\nhello world\n');
     }));
   }));
 }));

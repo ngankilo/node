@@ -20,7 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 'use strict';
-const common = require('../common');
+require('../common');
 const assert = require('assert');
 const cluster = require('cluster');
 const net = require('net');
@@ -30,7 +30,7 @@ let success;
 let worker;
 let server;
 
-// workers do not exit on disconnect, they exit under normal node rules: when
+// Workers do not exit on disconnect, they exit under normal node rules: when
 // they have nothing keeping their loop alive, like an active connection
 //
 // test this by:
@@ -55,12 +55,12 @@ if (cluster.isMaster) {
       success = true;
     });
 
-  }).listen(common.PORT, function() {
+  }).listen(0, function() {
     const port = this.address().port;
 
     worker = cluster.fork()
       .on('online', function() {
-        this.send({port: port});
+        this.send({ port });
       });
   });
   process.on('exit', function() {

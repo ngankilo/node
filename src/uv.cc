@@ -21,25 +21,38 @@
 
 #include "uv.h"
 #include "node.h"
-#include "env.h"
+#include "node_internals.h"
 #include "env-inl.h"
 
 namespace node {
-namespace uv {
+namespace {
 
+using v8::Array;
 using v8::Context;
 using v8::FunctionCallbackInfo;
 using v8::Integer;
+using v8::Isolate;
 using v8::Local;
+using v8::Map;
 using v8::Object;
+using v8::String;
 using v8::Value;
 
 
 void ErrName(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
-  int err = args[0]->Int32Value();
-  if (err >= 0)
-    return env->ThrowError("err >= 0");
+  if (env->options()->pending_deprecation && env->EmitErrNameWarning()) {
+    if (ProcessEmitDeprecationWarning(
+        env,
+        "Directly calling process.binding('uv').errname(<val>) is being"
+        " deprecated. "
+        "Please make sure to use util.getSystemErrorName() instead.",
+        "DEP0119").IsNothing())
+    return;
+  }
+  int err;
+  if (!args[0]->Int32Value(env->context()).To(&err)) return;
+  CHECK_LT(err, 0);
   const char* name = uv_err_name(err);
   args.GetReturnValue().Set(OneByteString(env->isolate(), name));
 }
@@ -47,19 +60,39 @@ void ErrName(const FunctionCallbackInfo<Value>& args) {
 
 void Initialize(Local<Object> target,
                 Local<Value> unused,
-                Local<Context> context) {
+                Local<Context> context,
+                void* priv) {
   Environment* env = Environment::GetCurrent(context);
-  target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "errname"),
-              env->NewFunctionTemplate(ErrName)->GetFunction());
-#define V(name, _)                                                            \
-  target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "UV_" # name),            \
-              Integer::New(env->isolate(), UV_ ## name));
+  Isolate* isolate = env->isolate();
+  target->Set(env->context(),
+              FIXED_ONE_BYTE_STRING(isolate, "errname"),
+              env->NewFunctionTemplate(ErrName)
+                  ->GetFunction(env->context())
+                  .ToLocalChecked()).FromJust();
+
+#define V(name, _) NODE_DEFINE_CONSTANT(target, UV_##name);
   UV_ERRNO_MAP(V)
 #undef V
+
+  Local<Map> err_map = Map::New(isolate);
+
+#define V(name, msg) do {                                                     \
+  Local<Value> arr[] = {                                                      \
+    OneByteString(isolate, #name),                                            \
+    OneByteString(isolate, msg)                                               \
+  };                                                                          \
+  err_map->Set(context,                                                       \
+               Integer::New(isolate, UV_##name),                              \
+               Array::New(isolate, arr, arraysize(arr))).ToLocalChecked();    \
+} while (0);
+  UV_ERRNO_MAP(V)
+#undef V
+
+  target->Set(context, FIXED_ONE_BYTE_STRING(isolate, "errmap"),
+              err_map).FromJust();
 }
 
-
-}  // namespace uv
+}  // anonymous namespace
 }  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(uv, node::uv::Initialize)
+NODE_MODULE_CONTEXT_AWARE_INTERNAL(uv, node::Initialize)

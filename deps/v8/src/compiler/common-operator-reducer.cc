@@ -19,7 +19,7 @@ namespace compiler {
 
 namespace {
 
-Decision DecideCondition(Node* const cond) {
+Decision DecideCondition(JSHeapBroker* broker, Node* const cond) {
   switch (cond->opcode()) {
     case IrOpcode::kInt32Constant: {
       Int32Matcher mcond(cond);
@@ -27,7 +27,8 @@ Decision DecideCondition(Node* const cond) {
     }
     case IrOpcode::kHeapConstant: {
       HeapObjectMatcher mcond(cond);
-      return mcond.Value()->BooleanValue() ? Decision::kTrue : Decision::kFalse;
+      return mcond.Ref(broker).BooleanValue() ? Decision::kTrue
+                                              : Decision::kFalse;
     }
     default:
       return Decision::kUnknown;
@@ -37,17 +38,22 @@ Decision DecideCondition(Node* const cond) {
 }  // namespace
 
 CommonOperatorReducer::CommonOperatorReducer(Editor* editor, Graph* graph,
+                                             JSHeapBroker* js_heap_broker,
                                              CommonOperatorBuilder* common,
-                                             MachineOperatorBuilder* machine)
+                                             MachineOperatorBuilder* machine,
+                                             Zone* temp_zone)
     : AdvancedReducer(editor),
       graph_(graph),
+      js_heap_broker_(js_heap_broker),
       common_(common),
       machine_(machine),
-      dead_(graph->NewNode(common->Dead())) {
+      dead_(graph->NewNode(common->Dead())),
+      zone_(temp_zone) {
   NodeProperties::SetType(dead_, Type::None());
 }
 
 Reduction CommonOperatorReducer::Reduce(Node* node) {
+  DisallowHeapAccess no_heap_access;
   switch (node->opcode()) {
     case IrOpcode::kBranch:
       return ReduceBranch(node);
@@ -64,6 +70,8 @@ Reduction CommonOperatorReducer::Reduce(Node* node) {
       return ReduceReturn(node);
     case IrOpcode::kSelect:
       return ReduceSelect(node);
+    case IrOpcode::kSwitch:
+      return ReduceSwitch(node);
     default:
       break;
   }
@@ -81,8 +89,10 @@ Reduction CommonOperatorReducer::ReduceBranch(Node* node) {
   // not (i.e. true being returned in the false case and vice versa).
   if (cond->opcode() == IrOpcode::kBooleanNot ||
       (cond->opcode() == IrOpcode::kSelect &&
-       DecideCondition(cond->InputAt(1)) == Decision::kFalse &&
-       DecideCondition(cond->InputAt(2)) == Decision::kTrue)) {
+       DecideCondition(js_heap_broker(), cond->InputAt(1)) ==
+           Decision::kFalse &&
+       DecideCondition(js_heap_broker(), cond->InputAt(2)) ==
+           Decision::kTrue)) {
     for (Node* const use : node->uses()) {
       switch (use->opcode()) {
         case IrOpcode::kIfTrue:
@@ -104,7 +114,7 @@ Reduction CommonOperatorReducer::ReduceBranch(Node* node) {
         node, common()->Branch(NegateBranchHint(BranchHintOf(node->op()))));
     return Changed(node);
   }
-  Decision const decision = DecideCondition(cond);
+  Decision const decision = DecideCondition(js_heap_broker(), cond);
   if (decision == Decision::kUnknown) return NoChange();
   Node* const control = node->InputAt(1);
   for (Node* const use : node->uses()) {
@@ -126,7 +136,7 @@ Reduction CommonOperatorReducer::ReduceDeoptimizeConditional(Node* node) {
   DCHECK(node->opcode() == IrOpcode::kDeoptimizeIf ||
          node->opcode() == IrOpcode::kDeoptimizeUnless);
   bool condition_is_true = node->opcode() == IrOpcode::kDeoptimizeUnless;
-  DeoptimizeReason reason = DeoptimizeReasonOf(node->op());
+  DeoptimizeParameters p = DeoptimizeParametersOf(node->op());
   Node* condition = NodeProperties::GetValueInput(node, 0);
   Node* frame_state = NodeProperties::GetValueInput(node, 1);
   Node* effect = NodeProperties::GetEffectInput(node);
@@ -137,19 +147,21 @@ Reduction CommonOperatorReducer::ReduceDeoptimizeConditional(Node* node) {
   // (as guaranteed by the graph reduction logic).
   if (condition->opcode() == IrOpcode::kBooleanNot) {
     NodeProperties::ReplaceValueInput(node, condition->InputAt(0), 0);
-    NodeProperties::ChangeOp(node, condition_is_true
-                                       ? common()->DeoptimizeIf(reason)
-                                       : common()->DeoptimizeUnless(reason));
+    NodeProperties::ChangeOp(
+        node,
+        condition_is_true
+            ? common()->DeoptimizeIf(p.kind(), p.reason(), p.feedback())
+            : common()->DeoptimizeUnless(p.kind(), p.reason(), p.feedback()));
     return Changed(node);
   }
-  Decision const decision = DecideCondition(condition);
+  Decision const decision = DecideCondition(js_heap_broker(), condition);
   if (decision == Decision::kUnknown) return NoChange();
   if (condition_is_true == (decision == Decision::kTrue)) {
     ReplaceWithValue(node, dead(), effect, control);
   } else {
-    control =
-        graph()->NewNode(common()->Deoptimize(DeoptimizeKind::kEager, reason),
-                         frame_state, effect, control);
+    control = graph()->NewNode(
+        common()->Deoptimize(p.kind(), p.reason(), p.feedback()), frame_state,
+        effect, control);
     // TODO(bmeurer): This should be on the AdvancedReducer somehow.
     NodeProperties::MergeControlToEnd(graph(), common(), control);
     Revisit(graph()->end());
@@ -284,54 +296,90 @@ Reduction CommonOperatorReducer::ReducePhi(Node* node) {
   return Replace(value);
 }
 
-
 Reduction CommonOperatorReducer::ReduceReturn(Node* node) {
   DCHECK_EQ(IrOpcode::kReturn, node->opcode());
   Node* effect = NodeProperties::GetEffectInput(node);
-  Node* const control = NodeProperties::GetControlInput(node);
-  bool changed = false;
   if (effect->opcode() == IrOpcode::kCheckpoint) {
     // Any {Return} node can never be used to insert a deoptimization point,
     // hence checkpoints can be cut out of the effect chain flowing into it.
     effect = NodeProperties::GetEffectInput(effect);
     NodeProperties::ReplaceEffectInput(node, effect);
-    changed = true;
+    Reduction const reduction = ReduceReturn(node);
+    return reduction.Changed() ? reduction : Changed(node);
   }
   // TODO(ahaas): Extend the reduction below to multiple return values.
   if (ValueInputCountOfReturn(node->op()) != 1) {
     return NoChange();
   }
-  Node* const value = node->InputAt(1);
+  Node* pop_count = NodeProperties::GetValueInput(node, 0);
+  Node* value = NodeProperties::GetValueInput(node, 1);
+  Node* control = NodeProperties::GetControlInput(node);
   if (value->opcode() == IrOpcode::kPhi &&
       NodeProperties::GetControlInput(value) == control &&
-      effect->opcode() == IrOpcode::kEffectPhi &&
-      NodeProperties::GetControlInput(effect) == control &&
       control->opcode() == IrOpcode::kMerge) {
+    // This optimization pushes {Return} nodes through merges. It checks that
+    // the return value is actually a {Phi} and the return control dependency
+    // is the {Merge} to which the {Phi} belongs.
+
+    // Value1 ... ValueN Control1 ... ControlN
+    //   ^          ^       ^            ^
+    //   |          |       |            |
+    //   +----+-----+       +------+-----+
+    //        |                    |
+    //       Phi --------------> Merge
+    //        ^                    ^
+    //        |                    |
+    //        |  +-----------------+
+    //        |  |
+    //       Return -----> Effect
+    //         ^
+    //         |
+    //        End
+
+    // Now the effect input to the {Return} node can be either an {EffectPhi}
+    // hanging off the same {Merge}, or the {Merge} node is only connected to
+    // the {Return} and the {Phi}, in which case we know that the effect input
+    // must somehow dominate all merged branches.
+
     Node::Inputs control_inputs = control->inputs();
     Node::Inputs value_inputs = value->inputs();
-    Node::Inputs effect_inputs = effect->inputs();
     DCHECK_NE(0, control_inputs.count());
     DCHECK_EQ(control_inputs.count(), value_inputs.count() - 1);
-    DCHECK_EQ(control_inputs.count(), effect_inputs.count() - 1);
     DCHECK_EQ(IrOpcode::kEnd, graph()->end()->opcode());
     DCHECK_NE(0, graph()->end()->InputCount());
-    for (int i = 0; i < control_inputs.count(); ++i) {
-      // Create a new {Return} and connect it to {end}. We don't need to mark
-      // {end} as revisit, because we mark {node} as {Dead} below, which was
-      // previously connected to {end}, so we know for sure that at some point
-      // the reducer logic will visit {end} again.
-      Node* ret = graph()->NewNode(common()->Return(), node->InputAt(0),
-                                   value_inputs[i], effect_inputs[i],
-                                   control_inputs[i]);
-      NodeProperties::MergeControlToEnd(graph(), common(), ret);
+    if (control->OwnedBy(node, value)) {
+      for (int i = 0; i < control_inputs.count(); ++i) {
+        // Create a new {Return} and connect it to {end}. We don't need to mark
+        // {end} as revisit, because we mark {node} as {Dead} below, which was
+        // previously connected to {end}, so we know for sure that at some point
+        // the reducer logic will visit {end} again.
+        Node* ret = graph()->NewNode(node->op(), pop_count, value_inputs[i],
+                                     effect, control_inputs[i]);
+        NodeProperties::MergeControlToEnd(graph(), common(), ret);
+      }
+      // Mark the Merge {control} and Return {node} as {dead}.
+      Replace(control, dead());
+      return Replace(dead());
+    } else if (effect->opcode() == IrOpcode::kEffectPhi &&
+               NodeProperties::GetControlInput(effect) == control) {
+      Node::Inputs effect_inputs = effect->inputs();
+      DCHECK_EQ(control_inputs.count(), effect_inputs.count() - 1);
+      for (int i = 0; i < control_inputs.count(); ++i) {
+        // Create a new {Return} and connect it to {end}. We don't need to mark
+        // {end} as revisit, because we mark {node} as {Dead} below, which was
+        // previously connected to {end}, so we know for sure that at some point
+        // the reducer logic will visit {end} again.
+        Node* ret = graph()->NewNode(node->op(), pop_count, value_inputs[i],
+                                     effect_inputs[i], control_inputs[i]);
+        NodeProperties::MergeControlToEnd(graph(), common(), ret);
+      }
+      // Mark the Merge {control} and Return {node} as {dead}.
+      Replace(control, dead());
+      return Replace(dead());
     }
-    // Mark the merge {control} and return {node} as {dead}.
-    Replace(control, dead());
-    return Replace(dead());
   }
-  return changed ? Changed(node) : NoChange();
+  return NoChange();
 }
-
 
 Reduction CommonOperatorReducer::ReduceSelect(Node* node) {
   DCHECK_EQ(IrOpcode::kSelect, node->opcode());
@@ -339,7 +387,7 @@ Reduction CommonOperatorReducer::ReduceSelect(Node* node) {
   Node* const vtrue = node->InputAt(1);
   Node* const vfalse = node->InputAt(2);
   if (vtrue == vfalse) return Replace(vtrue);
-  switch (DecideCondition(cond)) {
+  switch (DecideCondition(js_heap_broker(), cond)) {
     case Decision::kTrue:
       return Replace(vtrue);
     case Decision::kFalse:
@@ -376,6 +424,42 @@ Reduction CommonOperatorReducer::ReduceSelect(Node* node) {
   return NoChange();
 }
 
+Reduction CommonOperatorReducer::ReduceSwitch(Node* node) {
+  DCHECK_EQ(IrOpcode::kSwitch, node->opcode());
+  Node* const switched_value = node->InputAt(0);
+  Node* const control = node->InputAt(1);
+
+  // Attempt to constant match the switched value against the IfValue cases. If
+  // no case matches, then use the IfDefault. We don't bother marking
+  // non-matching cases as dead code (same for an unused IfDefault), because the
+  // Switch itself will be marked as dead code.
+  Int32Matcher mswitched(switched_value);
+  if (mswitched.HasValue()) {
+    bool matched = false;
+
+    size_t const projection_count = node->op()->ControlOutputCount();
+    Node** projections = zone_->NewArray<Node*>(projection_count);
+    NodeProperties::CollectControlProjections(node, projections,
+                                              projection_count);
+    for (size_t i = 0; i < projection_count - 1; i++) {
+      Node* if_value = projections[i];
+      DCHECK_EQ(IrOpcode::kIfValue, if_value->opcode());
+      const IfValueParameters& p = IfValueParametersOf(if_value->op());
+      if (p.value() == mswitched.Value()) {
+        matched = true;
+        Replace(if_value, control);
+        break;
+      }
+    }
+    if (!matched) {
+      Node* if_default = projections[projection_count - 1];
+      DCHECK_EQ(IrOpcode::kIfDefault, if_default->opcode());
+      Replace(if_default, control);
+    }
+    return Replace(dead());
+  }
+  return NoChange();
+}
 
 Reduction CommonOperatorReducer::Change(Node* node, Operator const* op,
                                         Node* a) {

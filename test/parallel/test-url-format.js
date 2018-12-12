@@ -173,6 +173,16 @@ const formatTests = {
     hash: '#bar'
   },
 
+  // `#` in path end + `#` in query
+  '/path/to/%%23?foo=the%231#bar': {
+    href: '/path/to/%%23?foo=the%231#bar',
+    pathname: '/path/to/%#',
+    query: {
+      foo: 'the#1'
+    },
+    hash: '#bar'
+  },
+
   // `?` and `#` in path and search
   'http://ex.com/foo%3F100%m%23r?abc=the%231?&foo=bar#frag': {
     href: 'http://ex.com/foo%3F100%m%23r?abc=the%231?&foo=bar#frag',
@@ -217,7 +227,7 @@ const formatTests = {
     path: '/node'
   },
 
-   // greater than or equal to 63 characters after `.` in hostname
+  // greater than or equal to 63 characters after `.` in hostname
   [`http://www.${'z'.repeat(63)}example.com/node`]: {
     href: `http://www.${'z'.repeat(63)}example.com/node`,
     protocol: 'http:',
@@ -251,10 +261,8 @@ for (const u in formatTests) {
   const actual = url.format(u);
   const actualObj = url.format(formatTests[u]);
   assert.strictEqual(actual, expect,
-                     'wonky format(' + u + ') == ' + expect +
-                     '\nactual:' + actual);
+                     `wonky format(${u}) == ${expect}\nactual:${actual}`);
   assert.strictEqual(actualObj, expect,
-                     'wonky format(' + JSON.stringify(formatTests[u]) +
-                     ') == ' + expect +
-                     '\nactual: ' + actualObj);
+                     `wonky format(${JSON.stringify(formatTests[u])}) == ${
+                       expect}\nactual: ${actualObj}`);
 }

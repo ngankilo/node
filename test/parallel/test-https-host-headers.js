@@ -1,31 +1,29 @@
 'use strict';
 const common = require('../common');
-const assert = require('assert');
+const fixtures = require('../common/fixtures');
 
-if (!common.hasCrypto) {
+if (!common.hasCrypto)
   common.skip('missing crypto');
-  return;
-}
+
+const assert = require('assert');
 const https = require('https');
 
-const fs = require('fs');
 const options = {
-  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
-  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
+  key: fixtures.readKey('agent1-key.pem'),
+  cert: fixtures.readKey('agent1-cert.pem')
 };
 const httpsServer = https.createServer(options, reqHandler);
 
 function reqHandler(req, res) {
-  console.log('Got request: ' + req.headers.host + ' ' + req.url);
-  if (req.url === '/setHostFalse5') {
+  console.log(`Got request: ${req.headers.host} ${req.url}`);
+  if (req.url.startsWith('/setHostFalse')) {
     assert.strictEqual(req.headers.host, undefined);
   } else {
-    assert.strictEqual(req.headers.host, `localhost:${this.address().port}`,
-                       'Wrong host header for req[' + req.url + ']: ' +
-                 req.headers.host);
+    assert.strictEqual(
+      req.headers.host, `localhost:${this.address().port}`,
+      `Wrong host header for req[${req.url}]: ${req.headers.host}`);
   }
   res.writeHead(200, {});
-  //process.nextTick(function() { res.end('ok'); });
   res.end('ok');
 }
 
@@ -41,7 +39,7 @@ function testHttps() {
 
   function cb(res) {
     counter--;
-    console.log('back from https request. counter = ' + counter);
+    console.log(`back from https request. counter = ${counter}`);
     if (counter === 0) {
       httpsServer.close();
       console.log('ok');
@@ -54,56 +52,79 @@ function testHttps() {
     assert.ifError(er);
     https.get({
       method: 'GET',
-      path: '/' + (counter++),
+      path: `/${counter++}`,
       host: 'localhost',
-      //agent: false,
       port: this.address().port,
       rejectUnauthorized: false
     }, cb).on('error', thrower);
 
     https.request({
       method: 'GET',
-      path: '/' + (counter++),
+      path: `/${counter++}`,
       host: 'localhost',
-      //agent: false,
       port: this.address().port,
       rejectUnauthorized: false
     }, cb).on('error', thrower).end();
 
     https.request({
       method: 'POST',
-      path: '/' + (counter++),
+      path: `/${counter++}`,
       host: 'localhost',
-      //agent: false,
       port: this.address().port,
       rejectUnauthorized: false
     }, cb).on('error', thrower).end();
 
     https.request({
       method: 'PUT',
-      path: '/' + (counter++),
+      path: `/${counter++}`,
       host: 'localhost',
-      //agent: false,
       port: this.address().port,
       rejectUnauthorized: false
     }, cb).on('error', thrower).end();
 
     https.request({
       method: 'DELETE',
-      path: '/' + (counter++),
+      path: `/${counter++}`,
       host: 'localhost',
-      //agent: false,
       port: this.address().port,
       rejectUnauthorized: false
     }, cb).on('error', thrower).end();
 
     https.get({
       method: 'GET',
-      path: '/setHostFalse' + (counter++),
+      path: `/setHostFalse${counter++}`,
       host: 'localhost',
       setHost: false,
       port: this.address().port,
       rejectUnauthorized: false
+    }, cb).on('error', thrower);
+
+    https.request({
+      method: 'GET',
+      path: `/${counter++}`,
+      host: 'localhost',
+      setHost: true,
+      // agent: false,
+      port: this.address().port,
+      rejectUnauthorized: false
     }, cb).on('error', thrower).end();
+
+    https.get({
+      method: 'GET',
+      path: `/setHostFalse${counter++}`,
+      host: 'localhost',
+      setHost: 0,
+      port: this.address().port,
+      rejectUnauthorized: false
+    }, cb).on('error', thrower);
+
+    https.get({
+      method: 'GET',
+      path: `/setHostFalse${counter++}`,
+      host: 'localhost',
+      setHost: null,
+      port: this.address().port,
+      rejectUnauthorized: false
+    }, cb).on('error', thrower);
   });
 }

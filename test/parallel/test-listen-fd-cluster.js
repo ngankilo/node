@@ -21,17 +21,15 @@
 
 'use strict';
 const common = require('../common');
+if (common.isWindows)
+  common.skip('This test is disabled on windows.');
+
 const assert = require('assert');
 const http = require('http');
 const net = require('net');
 const cluster = require('cluster');
 
 console.error('Cluster listen fd test', process.argv[2] || 'runner');
-
-if (common.isWindows) {
-  common.skip('This test is disabled on windows.');
-  return;
-}
 
 // Process relationship is:
 //
@@ -49,14 +47,14 @@ process.on('exit', function() {
   assert.ok(ok);
 });
 
-// spawn the parent, and listen for it to tell us the pid of the cluster.
+// Spawn the parent, and listen for it to tell us the pid of the cluster.
 // WARNING: This is an example of listening on some arbitrary FD number
 // that has already been bound elsewhere in advance.  However, binding
 // server handles to stdio fd's is NOT a good or reliable way to do
 // concurrency in HTTP servers!  Use the cluster module, or if you want
 // a more low-level approach, use child process IPC manually.
 test(function(parent, port) {
-  // now make sure that we can request to the worker, then kill it.
+  // Now make sure that we can request to the worker, then kill it.
   http.get({
     server: 'localhost',
     port: port,
@@ -87,7 +85,7 @@ function test(cb) {
     conn.end('hello from parent\n');
   }).listen(0, function() {
     const port = this.address().port;
-    console.error('server listening on %d', port);
+    console.error(`server listening on ${port}`);
 
     const spawn = require('child_process').spawn;
     const master = spawn(process.execPath, [__filename, 'master'], {

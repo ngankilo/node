@@ -1,9 +1,17 @@
 # Global Objects
 
+<!--introduced_in=v0.10.0-->
 <!-- type=misc -->
 
-These objects are available in all modules. Some of these objects aren't
-actually in the global scope but in the module scope - this will be noted.
+These objects are available in all modules. The following variables may appear
+to be global but are not. They exist only in the scope of modules, see the
+[module system documentation][]:
+
+- [`__dirname`][]
+- [`__filename`][]
+- [`exports`][]
+- [`module`][]
+- [`require()`][]
 
 The objects listed here are specific to Node.js. There are a number of
 [built-in objects][] that are part of the JavaScript language itself, which are
@@ -21,67 +29,12 @@ added: v0.1.103
 Used to handle binary data. See the [buffer section][].
 
 ## \_\_dirname
-<!-- YAML
-added: v0.1.27
--->
 
-<!-- type=var -->
-
-* {string}
-
-The directory name of the current module. This the same as the
-[`path.dirname()`][] of the [`__filename`][].
-
-`__dirname` is not actually a global but rather local to each module.
-
-Example: running `node example.js` from `/Users/mjr`
-
-```js
-console.log(__dirname);
-// Prints: /Users/mjr
-console.log(path.dirname(__filename));
-// Prints: /Users/mjr
-```
+This variable may appear to be global but is not. See [`__dirname`].
 
 ## \_\_filename
-<!-- YAML
-added: v0.0.1
--->
 
-<!-- type=var -->
-
-* {string}
-
-The file name of the current module. This is the resolved absolute path of the
-current module file.
-
-For a main program this is not necessarily the same as the file name used in the
-command line.
-
-See [`__dirname`][] for the directory name of the current module.
-
-`__filename` is not actually a global but rather local to each module.
-
-Examples:
-
-Running `node example.js` from `/Users/mjr`
-
-```js
-console.log(__filename);
-// Prints: /Users/mjr/example.js
-console.log(__dirname);
-// Prints: /Users/mjr
-```
-
-Given two modules: `a` and `b`, where `b` is a dependency of
-`a` and there is a directory structure of:
-
-* `/Users/mjr/app/a.js`
-* `/Users/mjr/app/node_modules/b/b.js`
-
-References to `__filename` within `b.js` will return
-`/Users/mjr/app/node_modules/b/b.js` while references to `__filename` within
-`a.js` will return `/Users/mjr/app/a.js`.
+This variable may appear to be global but is not. See [`__filename`].
 
 ## clearImmediate(immediateObject)
 <!-- YAML
@@ -122,19 +75,8 @@ added: v0.1.100
 Used to print to stdout and stderr. See the [`console`][] section.
 
 ## exports
-<!-- YAML
-added: v0.1.12
--->
 
-<!-- type=var -->
-
-A reference to the `module.exports` that is shorter to type.
-See [module system documentation][] for details on when to use `exports` and
-when to use `module.exports`.
-
-`exports` is not actually a global but rather local to each module.
-
-See the [module system documentation][] for more information.
+This variable may appear to be global but is not. See [`exports`].
 
 ## global
 <!-- YAML
@@ -145,27 +87,14 @@ added: v0.1.27
 
 * {Object} The global namespace object.
 
-In browsers, the top-level scope is the global scope. That means that in
-browsers if you're in the global scope `var something` will define a global
-variable. In Node.js this is different. The top-level scope is not the global
-scope; `var something` inside an Node.js module will be local to that module.
+In browsers, the top-level scope is the global scope. This means that
+within the browser `var something` will define a new global variable. In
+Node.js this is different. The top-level scope is not the global scope;
+`var something` inside a Node.js module will be local to that module.
 
 ## module
-<!-- YAML
-added: v0.1.16
--->
 
-<!-- type=var -->
-
-* {Object}
-
-A reference to the current module. In particular
-`module.exports` is used for defining what a module exports and makes
-available through `require()`.
-
-`module` is not actually a global but rather local to each module.
-
-See the [module system documentation][] for more information.
+This variable may appear to be global but is not. See [`module`].
 
 ## process
 <!-- YAML
@@ -178,72 +107,50 @@ added: v0.1.7
 
 The process object. See the [`process` object][] section.
 
-## require()
+## queueMicrotask(callback)
 <!-- YAML
-added: v0.1.13
+added: v11.0.0
 -->
 
-<!-- type=var -->
+<!-- type=global -->
 
-* {Function}
+> Stability: 1 - Experimental
 
-To require modules. See the [Modules][] section.  `require` is not actually a
-global but rather local to each module.
+* `callback` {Function} Function to be queued.
 
-### require.cache
-<!-- YAML
-added: v0.3.0
--->
+The `queueMicrotask()` method queues a microtask to invoke `callback`. If
+`callback` throws an exception, the [`process` object][] `'uncaughtException'`
+event will be emitted.
 
-* {Object}
-
-Modules are cached in this object when they are required. By deleting a key
-value from this object, the next `require` will reload the module. Note that
-this does not apply to [native addons][], for which reloading will result in an
-Error.
-
-### require.extensions
-<!-- YAML
-added: v0.3.0
-deprecated: v0.10.6
--->
-
-> Stability: 0 - Deprecated
-
-* {Object}
-
-Instruct `require` on how to handle certain file extensions.
-
-Process files with the extension `.sjs` as `.js`:
+The microtask queue is managed by V8 and may be used in a similar manner to
+the `process.nextTick()` queue, which is managed by Node.js. The
+`process.nextTick()` queue is always processed before the microtask queue
+within each turn of the Node.js event loop.
 
 ```js
-require.extensions['.sjs'] = require.extensions['.js'];
+// Here, `queueMicrotask()` is used to ensure the 'load' event is always
+// emitted asynchronously, and therefore consistently. Using
+// `process.nextTick()` here would result in the 'load' event always emitting
+// before any other promise jobs.
+
+DataHandler.prototype.load = async function load(key) {
+  const hit = this._cache.get(url);
+  if (hit !== undefined) {
+    queueMicrotask(() => {
+      this.emit('load', hit);
+    });
+    return;
+  }
+
+  const data = await fetchData(key);
+  this._cache.set(url, data);
+  this.emit('load', data);
+};
 ```
 
-**Deprecated**  In the past, this list has been used to load
-non-JavaScript modules into Node.js by compiling them on-demand.
-However, in practice, there are much better ways to do this, such as
-loading modules via some other Node.js program, or compiling them to
-JavaScript ahead of time.
+## require()
 
-Since the module system is locked, this feature will probably never go
-away.  However, it may have subtle bugs and complexities that are best
-left untouched.
-
-Note that the number of file system operations that the module system
-has to perform in order to resolve a `require(...)` statement to a
-filename scales linearly with the number of registered extensions.
-
-In other words, adding extensions slows down the module loader and
-should be discouraged.
-
-### require.resolve()
-<!-- YAML
-added: v0.3.0
--->
-
-Use the internal `require()` machinery to look up the location of a module,
-but rather than loading the module, just return the resolved filename.
+This variable may appear to be global but is not. See [`require()`].
 
 ## setImmediate(callback[, ...args])
 <!-- YAML
@@ -272,20 +179,76 @@ added: v0.0.1
 
 [`setTimeout`] is described in the [timers][] section.
 
-[`__dirname`]: #globals_dirname
-[`__filename`]: #globals_filename
-[`console`]: console.html
-[`path.dirname()`]: path.html#path_path_dirname_path
-[`process` object]: process.html#process_process
-[buffer section]: buffer.html
-[module system documentation]: modules.html
-[Modules]: modules.html#modules_modules
-[native addons]: addons.html
-[timers]: timers.html
+## TextDecoder
+<!-- YAML
+added: v11.0.0
+-->
+
+<!-- type=global -->
+
+The WHATWG `TextDecoder` class. See the [`TextDecoder`][] section.
+
+## TextEncoder
+<!-- YAML
+added: v11.0.0
+-->
+
+<!-- type=global -->
+
+The WHATWG `TextEncoder` class. See the [`TextEncoder`][] section.
+
+
+## URL
+<!-- YAML
+added: v10.0.0
+-->
+
+<!-- type=global -->
+
+The WHATWG `URL` class. See the [`URL`][] section.
+
+## URLSearchParams
+<!-- YAML
+added: v10.0.0
+-->
+
+<!-- type=global -->
+
+The WHATWG `URLSearchParams` class. See the [`URLSearchParams`][] section.
+
+## WebAssembly
+<!-- YAML
+added: v8.0.0
+-->
+
+<!-- type=global -->
+
+* {Object}
+
+The object that acts as the namespace for all W3C
+[WebAssembly][webassembly-org] related functionality. See the
+[Mozilla Developer Network][webassembly-mdn] for usage and compatibility.
+
+[`TextDecoder`]: util.html#util_class_util_textdecoder
+[`TextEncoder`]: util.html#util_class_util_textencoder
+[`URLSearchParams`]: url.html#url_class_urlsearchparams
+[`URL`]: url.html#url_class_url
+[`__dirname`]: modules.html#modules_dirname
+[`__filename`]: modules.html#modules_filename
 [`clearImmediate`]: timers.html#timers_clearimmediate_immediate
 [`clearInterval`]: timers.html#timers_clearinterval_timeout
 [`clearTimeout`]: timers.html#timers_cleartimeout_timeout
+[`console`]: console.html
+[`exports`]: modules.html#modules_exports
+[`module`]: modules.html#modules_module
+[`process` object]: process.html#process_process
+[`require()`]: modules.html#modules_require
 [`setImmediate`]: timers.html#timers_setimmediate_callback_args
 [`setInterval`]: timers.html#timers_setinterval_callback_delay_args
 [`setTimeout`]: timers.html#timers_settimeout_callback_delay_args
+[buffer section]: buffer.html
 [built-in objects]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects
+[module system documentation]: modules.html
+[timers]: timers.html
+[webassembly-mdn]: https://developer.mozilla.org/en-US/docs/WebAssembly
+[webassembly-org]: https://webassembly.org

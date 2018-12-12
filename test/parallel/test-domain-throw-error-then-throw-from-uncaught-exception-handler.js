@@ -17,7 +17,7 @@ const RAN_UNCAUGHT_EXCEPTION_HANDLER_EXIT_CODE = 42;
 
 if (process.argv[2] === 'child') {
   process.on('uncaughtException', common.mustCall(function onUncaught() {
-    if (process.execArgv.indexOf('--abort-on-uncaught-exception') !== -1) {
+    if (process.execArgv.includes('--abort-on-uncaught-exception')) {
       // When passing --abort-on-uncaught-exception to the child process,
       // we want to make sure that this handler (the process' uncaughtException
       // event handler) wasn't called. Unfortunately we can't parse the child
@@ -25,7 +25,7 @@ if (process.argv[2] === 'child') {
       // is not properly flushed in V8's Isolate::Throw right before the
       // process aborts due to an uncaught exception, and thus the error
       // message representing the error that was thrown cannot be read by the
-      // parent process. So instead of parsing the child process' stdandard
+      // parent process. So instead of parsing the child process' standard
       // error, the parent process will check that in the case
       // --abort-on-uncaught-exception was passed, the process did not exit
       // with exit code RAN_UNCAUGHT_EXCEPTION_HANDLER_EXIT_CODE.
@@ -90,14 +90,13 @@ function createTestCmdLine(options) {
     testCmd += 'ulimit -c 0 && ';
   }
 
-  testCmd += process.argv[0];
+  testCmd += `"${process.argv[0]}"`;
 
   if (options && options.withAbortOnUncaughtException) {
-    testCmd += ' ' + '--abort-on-uncaught-exception';
+    testCmd += ' --abort-on-uncaught-exception';
   }
 
-  testCmd += ' ' + process.argv[1];
-  testCmd += ' ' + 'child';
+  testCmd += ` "${process.argv[1]}" child`;
 
   return testCmd;
 }

@@ -1,13 +1,14 @@
+// Flags: --expose-internals
 'use strict';
 const common = require('../common');
-const assert = require('assert');
-const binding = process.binding('util');
-
 if (common.isWindows) {
   // No way to send CTRL_C_EVENT to processes from JS right now.
   common.skip('platform not supported');
-  return;
 }
+
+const assert = require('assert');
+const { internalBinding } = require('internal/test/binding');
+const binding = internalBinding('util');
 
 [(next) => {
   // Test with no signal observed.
@@ -17,7 +18,7 @@ if (common.isWindows) {
   next();
 },
  (next) => {
-  // Test with one call to the watchdog, one signal.
+   // Test with one call to the watchdog, one signal.
    binding.startSigintWatchdog();
    process.kill(process.pid, 'SIGINT');
    waitForPendingSignal(common.mustCall(() => {
@@ -27,7 +28,7 @@ if (common.isWindows) {
    }));
  },
  (next) => {
-  // Nested calls are okay.
+   // Nested calls are okay.
    binding.startSigintWatchdog();
    binding.startSigintWatchdog();
    process.kill(process.pid, 'SIGINT');
@@ -40,7 +41,7 @@ if (common.isWindows) {
    }));
  },
  () => {
-  // Signal comes in after first call to stop.
+   // Signal comes in after first call to stop.
    binding.startSigintWatchdog();
    binding.startSigintWatchdog();
    const hadPendingSignals1 = binding.stopSigintWatchdog();

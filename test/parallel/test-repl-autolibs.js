@@ -21,14 +21,12 @@
 
 'use strict';
 const common = require('../common');
+const ArrayStream = require('../common/arraystream');
 const assert = require('assert');
 const util = require('util');
 const repl = require('repl');
 
-// This test adds global variables
-common.globalCheck = false;
-
-const putIn = new common.ArrayStream();
+const putIn = new ArrayStream();
 repl.start('', putIn, null, true);
 
 test1();
@@ -40,8 +38,8 @@ function test1() {
     if (data.length) {
 
       // inspect output matches repl output
-      assert.strictEqual(data, util.inspect(require('fs'), null, 2, false) +
-                         '\n');
+      assert.strictEqual(data,
+                         `${util.inspect(require('fs'), null, 2, false)}\n`);
       // globally added lib matches required lib
       assert.strictEqual(global.fs, require('fs'));
       test2();
@@ -65,6 +63,7 @@ function test2() {
   };
   const val = {};
   global.url = val;
+  common.allowGlobals(val);
   assert(!gotWrite);
   putIn.run(['url']);
   assert(gotWrite);

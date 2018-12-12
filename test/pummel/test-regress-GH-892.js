@@ -27,23 +27,19 @@
 // TLS server causes the child process to exit cleanly before having sent
 // the entire buffer.
 const common = require('../common');
+if (!common.hasCrypto)
+  common.skip('missing crypto');
+
 const assert = require('assert');
 const spawn = require('child_process').spawn;
-
-if (!common.hasCrypto) {
-  common.skip('missing crypto');
-  return;
-}
 const https = require('https');
-
-const fs = require('fs');
+const fixtures = require('../common/fixtures');
 
 const bytesExpected = 1024 * 1024 * 32;
 
 let started = false;
 
-const childScript = require('path').join(common.fixturesDir,
-                                         'GH-892-request.js');
+const childScript = fixtures.path('GH-892-request.js');
 
 function makeRequest() {
   if (started) return;
@@ -63,7 +59,7 @@ function makeRequest() {
 
   child.on('exit', function(code) {
     assert.ok(/DONE/.test(stderrBuffer));
-    assert.strictEqual(0, code);
+    assert.strictEqual(code, 0);
   });
 
   // The following two lines forward the stdio from the child
@@ -81,8 +77,8 @@ function makeRequest() {
 
 
 const serverOptions = {
-  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
-  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
+  key: fixtures.readKey('agent1-key.pem'),
+  cert: fixtures.readKey('agent1-cert.pem')
 };
 
 let uploadCount = 0;
@@ -99,18 +95,18 @@ const server = https.Server(serverOptions, function(req, res) {
   });
 
   req.on('end', function() {
-    assert.strictEqual(bytesExpected, uploadCount);
-    res.writeHead(200, {'content-type': 'text/plain'});
+    assert.strictEqual(uploadCount, bytesExpected);
+    res.writeHead(200, { 'content-type': 'text/plain' });
     res.end('successful upload\n');
   });
 });
 
 server.listen(common.PORT, function() {
-  console.log('expecting %d bytes', bytesExpected);
+  console.log(`expecting ${bytesExpected} bytes`);
   makeRequest();
 });
 
 process.on('exit', function() {
-  console.error('got %d bytes', uploadCount);
+  console.error(`got ${uploadCount} bytes`);
   assert.strictEqual(uploadCount, bytesExpected);
 });

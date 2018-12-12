@@ -1,15 +1,17 @@
+// Flags: --expose-internals --no-warnings
 'use strict';
 
-const common = require('../common');
+require('../common');
 
-const { TTY, isTTY } = process.binding('tty_wrap');
+const { internalBinding } = require('internal/test/binding');
+const { TTY, isTTY } = internalBinding('tty_wrap');
 const strictEqual = require('assert').strictEqual;
 
 strictEqual(isTTY(0), true, 'fd 0 is not a TTY');
 
 const handle = new TTY(0);
 handle.readStart();
-handle.onread = common.noop;
+handle.onread = () => {};
 
 function isHandleActive(handle) {
   return process._getActiveHandles().some((active) => active === handle);

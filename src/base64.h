@@ -6,11 +6,13 @@
 #include "util.h"
 
 #include <stddef.h>
+#include <stdint.h>
 
 namespace node {
 //// Base 64 ////
-#define base64_encoded_size(size) ((size + 2 - ((size + 2) % 3)) / 3 * 4)
-
+static inline constexpr size_t base64_encoded_size(size_t size) {
+  return ((size + 2 - ((size + 2) % 3)) / 3 * 4);
+}
 
 // Doesn't check for padding at the end.  Can be 1-2 bytes over.
 static inline size_t base64_decoded_size_fast(size_t size) {
@@ -47,8 +49,9 @@ size_t base64_decoded_size(const TypeName* src, size_t size) {
 extern const int8_t unbase64_table[256];
 
 
-#define unbase64(x)                                                           \
-  static_cast<uint8_t>(unbase64_table[static_cast<uint8_t>(x)])
+inline static int8_t unbase64(uint8_t x) {
+  return unbase64_table[x];
+}
 
 
 template <typename TypeName>
@@ -99,10 +102,9 @@ size_t base64_decode_fast(char* const dst, const size_t dstlen,
         unbase64(src[i + 3]);
     // If MSB is set, input contains whitespace or is not valid base64.
     if (v & 0x80808080) {
-      const size_t old_i = i;
       if (!base64_decode_group_slow(dst, dstlen, src, srclen, &i, &k))
         return k;
-      max_i = old_i + (srclen - i) / 4 * 4;  // Align max_i again.
+      max_i = i + (srclen - i) / 4 * 4;  // Align max_i again.
     } else {
       dst[k + 0] = ((v >> 22) & 0xFC) | ((v >> 20) & 0x03);
       dst[k + 1] = ((v >> 12) & 0xF0) | ((v >> 10) & 0x0F);

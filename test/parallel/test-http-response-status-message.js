@@ -20,12 +20,11 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 'use strict';
-const common = require('../common');
+require('../common');
 const assert = require('assert');
 const http = require('http');
 const net = require('net');
-
-let testsComplete = 0;
+const Countdown = require('../common/countdown');
 
 const testCases = [
   { path: '/200', statusMessage: 'OK',
@@ -44,7 +43,7 @@ testCases.findByPath = function(path) {
     return testCase.path === path;
   });
   if (matching.length === 0) {
-    common.fail(`failed to find test case with path ${path}`);
+    assert.fail(`failed to find test case with path ${path}`);
   }
   return matching[0];
 };
@@ -59,33 +58,28 @@ const server = net.createServer(function(connection) {
   });
 });
 
-const runTest = function(testCaseIndex) {
+const countdown = new Countdown(testCases.length, () => server.close());
+
+function runTest(testCaseIndex) {
   const testCase = testCases[testCaseIndex];
 
   http.get({
     port: server.address().port,
     path: testCase.path
   }, function(response) {
-    console.log('client: expected status message: ' + testCase.statusMessage);
-    console.log('client: actual status message: ' + response.statusMessage);
+    console.log(`client: expected status message: ${testCase.statusMessage}`);
+    console.log(`client: actual status message: ${response.statusMessage}`);
     assert.strictEqual(testCase.statusMessage, response.statusMessage);
 
     response.on('end', function() {
-      testsComplete++;
-
+      countdown.dec();
       if (testCaseIndex + 1 < testCases.length) {
         runTest(testCaseIndex + 1);
-      } else {
-        server.close();
       }
     });
 
     response.resume();
   });
-};
+}
 
 server.listen(0, function() { runTest(0); });
-
-process.on('exit', function() {
-  assert.strictEqual(testCases.length, testsComplete);
-});

@@ -1,4 +1,7 @@
-# Node.js v0.10 ChangeLog
+# Node.js 0.10 ChangeLog
+
+<!--lint disable prohibited-strings-->
+<!--lint disable maximum-line-length-->
 
 <table>
 <tr>
@@ -62,6 +65,10 @@
 </table>
 
 * Other Versions
+  * [11.x](CHANGELOG_V11.md)
+  * [10.x](CHANGELOG_V10.md)
+  * [9.x](CHANGELOG_V9.md)
+  * [8.x](CHANGELOG_V8.md)
   * [7.x](CHANGELOG_V7.md)
   * [6.x](CHANGELOG_V6.md)
   * [5.x](CHANGELOG_V5.md)
@@ -70,7 +77,7 @@
   * [io.js](CHANGELOG_IOJS.md)
   * [Archive](CHANGELOG_ARCHIVE.md)
 
-**Note:** Node.js v0.10 is covered by the
+*Note*: Node.js v0.10 is covered by the
 [Node.js Long Term Support Plan](https://github.com/nodejs/LTS) and
 will be maintained until October 2016.
 

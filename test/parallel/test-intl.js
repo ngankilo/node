@@ -34,7 +34,7 @@ if (enablei18n === undefined) {
 // Else, returns false
 function haveLocale(loc) {
   const locs = process.config.variables.icu_locales.split(',');
-  return locs.indexOf(loc) !== -1;
+  return locs.includes(loc);
 }
 
 // Always run these. They should always pass, even if the locale
@@ -49,16 +49,13 @@ assert.strictEqual('ç'.toUpperCase(), 'Ç');
 
 if (!common.hasIntl) {
   const erMsg =
-      '"Intl" object is NOT present but v8_enable_i18n_support is ' +
-      enablei18n;
+    `"Intl" object is NOT present but v8_enable_i18n_support is ${enablei18n}`;
   assert.strictEqual(enablei18n, 0, erMsg);
   common.skip('Intl tests because Intl object not present.');
-
 } else {
   const erMsg =
-    '"Intl" object is present but v8_enable_i18n_support is ' +
-    enablei18n +
-    '. Is this test out of date?';
+    `"Intl" object is present but v8_enable_i18n_support is ${
+      enablei18n}. Is this test out of date?`;
   assert.strictEqual(enablei18n, 1, erMsg);
 
   // Construct a new date at the beginning of Unix time
@@ -68,16 +65,18 @@ if (!common.hasIntl) {
   const GMT = 'Etc/GMT';
 
   // Construct an English formatter. Should format to "Jan 70"
-  const dtf =
-      new Intl.DateTimeFormat(['en'],
-                              {timeZone: GMT, month: 'short', year: '2-digit'});
+  const dtf = new Intl.DateTimeFormat(['en'], {
+    timeZone: GMT,
+    month: 'short',
+    year: '2-digit'
+  });
 
   // If list is specified and doesn't contain 'en' then return.
   if (process.config.variables.icu_locales && !haveLocale('en')) {
-    common.skip('detailed Intl tests because English is not ' +
-                'listed as supported.');
+    common.printSkipMessage(
+      'detailed Intl tests because English is not listed as supported.');
     // Smoke test. Does it format anything, or fail?
-    console.log('Date(0) formatted to: ' + dtf.format(date0));
+    console.log(`Date(0) formatted to: ${dtf.format(date0)}`);
     return;
   }
 
@@ -92,7 +91,7 @@ if (!common.hasIntl) {
     assert.strictEqual(localeString, 'Jan 70');
   }
   // Options to request GMT
-  const optsGMT = {timeZone: GMT};
+  const optsGMT = { timeZone: GMT };
 
   // Test format
   {
@@ -100,20 +99,30 @@ if (!common.hasIntl) {
     assert.strictEqual(localeString, '1/1/1970, 12:00:00 AM');
   }
   // number format
-  const numberFormat = new Intl.NumberFormat(['en']).format(12345.67890);
-  assert.strictEqual(numberFormat, '12,345.679');
+  {
+    const numberFormat = new Intl.NumberFormat(['en']).format(12345.67890);
+    assert.strictEqual(numberFormat, '12,345.679');
+  }
+  // Significant Digits
+  {
+    const loc = ['en-US'];
+    const opts = { maximumSignificantDigits: 4 };
+    const num = 10.001;
+    const numberFormat = new Intl.NumberFormat(loc, opts).format(num);
+    assert.strictEqual(numberFormat, '10');
+  }
 
   const collOpts = { sensitivity: 'base', ignorePunctuation: true };
   const coll = new Intl.Collator(['en'], collOpts);
 
-  assert.strictEqual(coll.compare('blackbird', 'black-bird'), 0,
-                     'ignore punctuation failed');
-  assert.strictEqual(coll.compare('blackbird', 'red-bird'), -1,
-                     'compare less failed');
-  assert.strictEqual(coll.compare('bluebird', 'blackbird'), 1,
-                     'compare greater failed');
-  assert.strictEqual(coll.compare('Bluebird', 'bluebird'), 0,
-                     'ignore case failed');
-  assert.strictEqual(coll.compare('\ufb03', 'ffi'), 0,
-                     'ffi ligature (contraction) failed');
+  // ignore punctuation
+  assert.strictEqual(coll.compare('blackbird', 'black-bird'), 0);
+  // compare less
+  assert.strictEqual(coll.compare('blackbird', 'red-bird'), -1);
+  // compare greater
+  assert.strictEqual(coll.compare('bluebird', 'blackbird'), 1);
+  // ignore case
+  assert.strictEqual(coll.compare('Bluebird', 'bluebird'), 0);
+  // ffi ligature (contraction)
+  assert.strictEqual(coll.compare('\ufb03', 'ffi'), 0);
 }

@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-print('Checks that async chains for promises are correct.');
+let {session, contextGroup, Protocol} = InspectorTest.start('Checks that async chains for promises are correct.');
 
-InspectorTest.addScript(`
+contextGroup.addScript(`
 function foo1() {
   debugger;
 }
@@ -217,17 +217,19 @@ function reject() {
   return Promise.reject().catch(foo1);
 }
 
+function finally1() {
+  return Promise.reject().finally(foo1);
+}
+
+function finally2() {
+  return Promise.resolve().finally(foo1);
+}
 //# sourceURL=test.js`, 7, 26);
 
-InspectorTest.setupScriptMap();
+session.setupScriptMap();
 Protocol.Debugger.onPaused(message => {
-  InspectorTest.logCallFrames(message.params.callFrames);
-  var asyncStackTrace = message.params.asyncStackTrace;
-  while (asyncStackTrace) {
-    InspectorTest.log(`-- ${asyncStackTrace.description} --`);
-    InspectorTest.logCallFrames(asyncStackTrace.callFrames);
-    asyncStackTrace = asyncStackTrace.parent;
-  }
+  session.logCallFrames(message.params.callFrames);
+  session.logAsyncStackTrace(message.params.asyncStackTrace);
   InspectorTest.log('');
   Protocol.Debugger.resume();
 });
@@ -235,20 +237,12 @@ Protocol.Debugger.onPaused(message => {
 Protocol.Debugger.enable();
 Protocol.Debugger.setAsyncCallStackDepth({ maxDepth: 128 });
 var testList = [
-  'promise',
-  'promiseResolvedBySetTimeout',
-  'promiseAll',
-  'promiseAllReverseOrder',
-  'promiseRace',
-  'twoChainedCallbacks',
-  'promiseResolve',
-  'thenableJobResolvedInSetTimeout',
-  'thenableJobResolvedInSetTimeoutWithStack',
-  'thenableJobResolvedByPromise',
-  'thenableJobResolvedByPromiseWithStack',
-  'lateThenCallback',
-  'complex',
-  'reject',
+  'promise', 'promiseResolvedBySetTimeout', 'promiseAll',
+  'promiseAllReverseOrder', 'promiseRace', 'twoChainedCallbacks',
+  'promiseResolve', 'thenableJobResolvedInSetTimeout',
+  'thenableJobResolvedInSetTimeoutWithStack', 'thenableJobResolvedByPromise',
+  'thenableJobResolvedByPromiseWithStack', 'lateThenCallback', 'complex',
+  'reject', 'finally1', 'finally2'
 ]
 InspectorTest.runTestSuite(testList.map(name => {
   return eval(`

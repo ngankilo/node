@@ -44,9 +44,9 @@ assert.strictEqual(b[1], 0);
 assert.strictEqual(ucs2_control, c);
 
 // now create big strings
-const size = 1 + (1 << 20);
-write_str = Array(size).join(write_str);
-ucs2_control = Array(size).join(ucs2_control);
+const size = 1 << 20;
+write_str = write_str.repeat(size);
+ucs2_control = ucs2_control.repeat(size);
 
 // check resultant buffer and output string
 b = Buffer.from(write_str, 'ucs2');
@@ -82,7 +82,7 @@ assert.strictEqual(c_bin.toString('latin1'), ucs2_control);
 assert.strictEqual(c_ucs.toString('latin1'), ucs2_control);
 
 
-// now let's test BASE64 and HEX ecoding/decoding
+// now let's test BASE64 and HEX encoding/decoding
 const RADIOS = 2;
 const PRE_HALF_APEX = Math.ceil(EXTERN_APEX / 2) - RADIOS;
 const PRE_3OF4_APEX = Math.ceil((EXTERN_APEX / 4) * 3) - RADIOS;
@@ -131,7 +131,7 @@ const PRE_3OF4_APEX = Math.ceil((EXTERN_APEX / 4) * 3) - RADIOS;
 
 // https://github.com/nodejs/node/issues/1024
 {
-  const a = Array(1 << 20).join('x');
+  const a = 'x'.repeat(1 << 20 - 1);
   const b = Buffer.from(a, 'ucs2').toString('ucs2');
   const c = Buffer.from(b, 'utf8').toString('utf8');
 

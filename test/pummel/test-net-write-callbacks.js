@@ -29,7 +29,7 @@ const N = 500000;
 
 const server = net.Server(function(socket) {
   socket.on('data', function(d) {
-    console.error('got %d bytes', d.length);
+    console.error(`got ${d.length} bytes`);
   });
 
   socket.on('end', function() {
@@ -44,11 +44,12 @@ function makeCallback(c) {
   let called = false;
   return function() {
     if (called)
-      throw new Error('called callback #' + c + ' more than once');
+      throw new Error(`called callback #${c} more than once`);
     called = true;
-    if (c < lastCalled)
-      throw new Error('callbacks out of order. last=' + lastCalled +
-                      ' current=' + c);
+    if (c < lastCalled) {
+      throw new Error(
+        `callbacks out of order. last=${lastCalled} current=${c}`);
+    }
     lastCalled = c;
     cbcount++;
   };
@@ -66,5 +67,5 @@ server.listen(common.PORT, function() {
 });
 
 process.on('exit', function() {
-  assert.strictEqual(N, cbcount);
+  assert.strictEqual(cbcount, N);
 });

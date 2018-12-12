@@ -28,22 +28,20 @@
  */
 
 const common = require('../common');
+if (common.isWindows)
+  common.skip('Sending dgram sockets to child processes is not supported');
+
 const dgram = require('dgram');
 const fork = require('child_process').fork;
 const assert = require('assert');
 
-if (common.isWindows) {
-  common.skip('Sending dgram sockets to child processes is not supported');
-  return;
-}
-
 if (process.argv[2] === 'child') {
   let childServer;
 
-  process.once('message', function(msg, clusterServer) {
+  process.once('message', (msg, clusterServer) => {
     childServer = clusterServer;
 
-    childServer.once('message', function() {
+    childServer.once('message', () => {
       process.send('gotMessage');
       childServer.close();
     });
@@ -61,27 +59,27 @@ if (process.argv[2] === 'child') {
   let childGotMessage = false;
   let parentGotMessage = false;
 
-  parentServer.once('message', function(msg, rinfo) {
+  parentServer.once('message', (msg, rinfo) => {
     parentGotMessage = true;
     parentServer.close();
   });
 
-  parentServer.on('listening', function() {
+  parentServer.on('listening', () => {
     child.send('server', parentServer);
 
-    child.on('message', function(msg) {
+    child.on('message', (msg) => {
       if (msg === 'gotMessage') {
         childGotMessage = true;
-      } else if (msg = 'handlReceived') {
+      } else if (msg === 'handleReceived') {
         sendMessages();
       }
     });
   });
 
-  const sendMessages = function() {
+  function sendMessages() {
     const serverPort = parentServer.address().port;
 
-    const timer = setInterval(function() {
+    const timer = setInterval(() => {
       /*
        * Both the parent and the child got at least one message,
        * test passed, clean up everything.
@@ -96,17 +94,17 @@ if (process.argv[2] === 'child') {
           msg.length,
           serverPort,
           '127.0.0.1',
-          function(err) {
+          (err) => {
             assert.ifError(err);
           }
         );
       }
     }, 1);
-  };
+  }
 
   parentServer.bind(0, '127.0.0.1');
 
-  process.once('exit', function() {
+  process.once('exit', () => {
     assert(parentGotMessage);
     assert(childGotMessage);
   });

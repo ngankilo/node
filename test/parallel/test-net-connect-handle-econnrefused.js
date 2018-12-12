@@ -24,13 +24,13 @@ const common = require('../common');
 const net = require('net');
 const assert = require('assert');
 
-
-// Hopefully nothing is running on common.PORT
-const c = net.createConnection(common.PORT);
-
-c.on('connect', common.mustNotCall());
-
-c.on('error', common.mustCall(function(e) {
-  console.error('couldn\'t connect.');
-  assert.strictEqual('ECONNREFUSED', e.code);
+const server = net.createServer();
+server.listen(0);
+const port = server.address().port;
+server.close(common.mustCall(() => {
+  const c = net.createConnection(port);
+  c.on('connect', common.mustNotCall());
+  c.on('error', common.mustCall((e) => {
+    assert.strictEqual(e.code, 'ECONNREFUSED');
+  }));
 }));

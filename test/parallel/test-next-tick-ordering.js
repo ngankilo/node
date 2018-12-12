@@ -29,7 +29,7 @@ const done = [];
 
 function get_printer(timeout) {
   return function() {
-    console.log('Running from setTimeout ' + timeout);
+    console.log(`Running from setTimeout ${timeout}`);
     done.push(timeout);
   };
 }
@@ -47,7 +47,7 @@ console.log('Running from main.');
 
 
 process.on('exit', function() {
-  assert.strictEqual('nextTick', done[0]);
+  assert.strictEqual(done[0], 'nextTick');
   /* Disabling this test. I don't think we can ensure the order
   for (i = 0; i < N; i += 1) {
     assert.strictEqual(i, done[i + 1]);

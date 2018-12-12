@@ -70,15 +70,15 @@ if (cluster.isMaster) {
   });
 
   target.on('listening', function() {
-    cluster.fork();
-    cluster.fork();
+    cluster.fork({ PORT: target.address().port });
+    cluster.fork({ PORT: target.address().port });
     if (!common.isWindows) {
-      cluster.fork({BOUND: 'y'});
-      cluster.fork({BOUND: 'y'});
+      cluster.fork({ BOUND: 'y', PORT: target.address().port });
+      cluster.fork({ BOUND: 'y', PORT: target.address().port });
     }
   });
 
-  target.bind({port: common.PORT, exclusive: true});
+  target.bind({ port: 0, exclusive: true });
 
   return;
 }
@@ -92,13 +92,14 @@ source.on('close', function() {
 if (process.env.BOUND === 'y') {
   source.bind(0);
 } else {
-  // cluster doesn't know about exclusive sockets, so it won't close them. This
+  // Cluster doesn't know about exclusive sockets, so it won't close them. This
   // is expected, its the same situation for timers, outgoing tcp connections,
   // etc, which also keep workers alive after disconnect was requested.
   source.unref();
 }
 
+assert(process.env.PORT);
 const buf = Buffer.from(process.pid.toString());
 const interval = setInterval(() => {
-  source.send(buf, common.PORT, '127.0.0.1');
+  source.send(buf, process.env.PORT, '127.0.0.1');
 }, 1).unref();

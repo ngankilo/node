@@ -20,14 +20,16 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 'use strict';
-const common = require('../common');
+require('../common');
 const fs = require('fs');
 const assert = require('assert');
 const join = require('path').join;
 
-const filename = join(common.tmpDir, 'out.txt');
+const tmpdir = require('../common/tmpdir');
 
-common.refreshTmpDir();
+const filename = join(tmpdir.path, 'out.txt');
+
+tmpdir.refresh();
 
 const fd = fs.openSync(filename, 'w');
 
@@ -56,7 +58,7 @@ function testBuffer(b) {
   for (let i = 0; i < b.length; i++) {
     bytesChecked++;
     if (b[i] !== 'a'.charCodeAt(0) && b[i] !== '\n'.charCodeAt(0)) {
-      throw new Error('invalid char ' + i + ',' + b[i]);
+      throw new Error(`invalid char ${i},${b[i]}`);
     }
   }
 }

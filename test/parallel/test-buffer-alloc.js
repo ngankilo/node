@@ -3,13 +3,11 @@ const common = require('../common');
 const assert = require('assert');
 const vm = require('vm');
 
-const buffer = require('buffer');
-const Buffer = buffer.Buffer;
-const SlowBuffer = buffer.SlowBuffer;
+const SlowBuffer = require('buffer').SlowBuffer;
 
 
 const b = Buffer.allocUnsafe(1024);
-assert.strictEqual(1024, b.length);
+assert.strictEqual(b.length, 1024);
 
 b[0] = -1;
 assert.strictEqual(b[0], 255);
@@ -23,17 +21,17 @@ for (let i = 0; i < 1024; i++) {
 }
 
 const c = Buffer.allocUnsafe(512);
-assert.strictEqual(512, c.length);
+assert.strictEqual(c.length, 512);
 
 const d = Buffer.from([]);
-assert.strictEqual(0, d.length);
+assert.strictEqual(d.length, 0);
 
 // Test offset properties
 {
   const b = Buffer.alloc(128);
-  assert.strictEqual(128, b.length);
-  assert.strictEqual(0, b.byteOffset);
-  assert.strictEqual(0, b.offset);
+  assert.strictEqual(b.length, 128);
+  assert.strictEqual(b.byteOffset, 0);
+  assert.strictEqual(b.offset, 0);
 }
 
 // Test creating a Buffer from a Uint32Array
@@ -64,29 +62,39 @@ assert.throws(() => b.write('test', 'utf8', 0),
               /is no longer supported/);
 
 
-// try to create 0-length buffers
-assert.doesNotThrow(() => Buffer.from(''));
-assert.doesNotThrow(() => Buffer.from('', 'ascii'));
-assert.doesNotThrow(() => Buffer.from('', 'latin1'));
-assert.doesNotThrow(() => Buffer.alloc(0));
-assert.doesNotThrow(() => Buffer.allocUnsafe(0));
-assert.doesNotThrow(() => new Buffer(''));
-assert.doesNotThrow(() => new Buffer('', 'ascii'));
-assert.doesNotThrow(() => new Buffer('', 'latin1'));
-assert.doesNotThrow(() => new Buffer('', 'binary'));
-assert.doesNotThrow(() => Buffer(0));
+// Try to create 0-length buffers. Should not throw.
+Buffer.from('');
+Buffer.from('', 'ascii');
+Buffer.from('', 'latin1');
+Buffer.alloc(0);
+Buffer.allocUnsafe(0);
+new Buffer('');
+new Buffer('', 'ascii');
+new Buffer('', 'latin1');
+new Buffer('', 'binary');
+Buffer(0);
+
+const outOfBoundsError = {
+  code: 'ERR_BUFFER_OUT_OF_BOUNDS',
+  type: RangeError
+};
+
+const outOfRangeError = {
+  code: 'ERR_OUT_OF_RANGE',
+  type: RangeError
+};
 
 // try to write a 0-length string beyond the end of b
-assert.throws(() => b.write('', 2048), RangeError);
+common.expectsError(() => b.write('', 2048), outOfBoundsError);
 
 // throw when writing to negative offset
-assert.throws(() => b.write('a', -1), RangeError);
+common.expectsError(() => b.write('a', -1), outOfBoundsError);
 
 // throw when writing past bounds from the pool
-assert.throws(() => b.write('a', 2048), RangeError);
+common.expectsError(() => b.write('a', 2048), outOfBoundsError);
 
 // throw when writing to negative offset
-assert.throws(() => b.write('a', -1), RangeError);
+common.expectsError(() => b.write('a', -1), outOfBoundsError);
 
 // try to copy 0 bytes worth of data into an empty buffer
 b.copy(Buffer.alloc(0), 0, 0, 0);
@@ -98,7 +106,7 @@ b.copy(Buffer.alloc(1), 1, 1, 1);
 // try to copy 0 bytes from past the end of the source buffer
 b.copy(Buffer.alloc(1), 0, 2048, 2048);
 
-// testing for smart defaults and ability to pass string values as offset
+// Testing for smart defaults and ability to pass string values as offset
 {
   const writeTest = Buffer.from('abcdes');
   writeTest.write('n', 'ascii');
@@ -109,9 +117,9 @@ b.copy(Buffer.alloc(1), 0, 2048, 2048);
   assert.strictEqual(writeTest.toString(), 'nodejs');
 }
 
-// Offset points to the end of the buffer
+// Offset points to the end of the buffer and does not throw.
 // (see https://github.com/nodejs/node/issues/8127).
-assert.doesNotThrow(() => Buffer.alloc(1).write('', 1, 0));
+Buffer.alloc(1).write('', 1, 0);
 
 // ASCII slice test
 {
@@ -168,7 +176,7 @@ assert.doesNotThrow(() => Buffer.alloc(1).write('', 1, 0));
 
 {
   const slice = b.slice(100, 150);
-  assert.strictEqual(50, slice.length);
+  assert.strictEqual(slice.length, 50);
   for (let i = 0; i < 50; i++) {
     assert.strictEqual(b[100 + i], slice[i]);
   }
@@ -205,13 +213,13 @@ assert.doesNotThrow(() => Buffer.alloc(1).write('', 1, 0));
   const a = Buffer.allocUnsafe(8);
   for (let i = 0; i < 8; i++) a[i] = i;
   const b = a.slice(4, 8);
-  assert.strictEqual(4, b[0]);
-  assert.strictEqual(5, b[1]);
-  assert.strictEqual(6, b[2]);
-  assert.strictEqual(7, b[3]);
+  assert.strictEqual(b[0], 4);
+  assert.strictEqual(b[1], 5);
+  assert.strictEqual(b[2], 6);
+  assert.strictEqual(b[3], 7);
   const c = b.slice(2, 4);
-  assert.strictEqual(6, c[0]);
-  assert.strictEqual(7, c[1]);
+  assert.strictEqual(c[0], 6);
+  assert.strictEqual(c[1], 7);
 }
 
 {
@@ -268,10 +276,10 @@ assert.doesNotThrow(() => Buffer.alloc(1).write('', 1, 0));
 
 // Test construction from arrayish object
 {
-  const arrayIsh = {0: 0, 1: 1, 2: 2, 3: 3, length: 4};
+  const arrayIsh = { 0: 0, 1: 1, 2: 2, 3: 3, length: 4 };
   let g = Buffer.from(arrayIsh);
   assert.deepStrictEqual(g, Buffer.from([0, 1, 2, 3]));
-  const strArrayIsh = {0: '0', 1: '1', 2: '2', 3: '3', length: 4};
+  const strArrayIsh = { 0: '0', 1: '1', 2: '2', 3: '3', length: 4 };
   g = Buffer.from(strArrayIsh);
   assert.deepStrictEqual(g, Buffer.from([0, 1, 2, 3]));
 }
@@ -279,7 +287,7 @@ assert.doesNotThrow(() => Buffer.alloc(1).write('', 1, 0));
 //
 // Test toString('base64')
 //
-assert.strictEqual('TWFu', (Buffer.from('Man')).toString('base64'));
+assert.strictEqual((Buffer.from('Man')).toString('base64'), 'TWFu');
 
 {
   // test that regular and URL-safe base64 both work
@@ -304,7 +312,7 @@ assert.strictEqual('TWFu', (Buffer.from('Man')).toString('base64'));
                    'dWVkIGFuZCBpbmRlZmF0aWdhYmxlIGdlbmVyYXRpb24gb2Yga25vd2xlZ' +
                    'GdlLCBleGNlZWRzIHRoZSBzaG9ydCB2ZWhlbWVuY2Ugb2YgYW55IGNhcm' +
                    '5hbCBwbGVhc3VyZS4=';
-  assert.strictEqual(expected, (Buffer.from(quote)).toString('base64'));
+  assert.strictEqual((Buffer.from(quote)).toString('base64'), expected);
 
   let b = Buffer.allocUnsafe(1024);
   let bytesWritten = b.write(expected, 0, 'base64');
@@ -312,12 +320,12 @@ assert.strictEqual('TWFu', (Buffer.from('Man')).toString('base64'));
   assert.strictEqual(quote, b.toString('ascii', 0, quote.length));
 
   // check that the base64 decoder ignores whitespace
-  const expectedWhite = expected.slice(0, 60) + ' \n' +
-                        expected.slice(60, 120) + ' \n' +
-                        expected.slice(120, 180) + ' \n' +
-                        expected.slice(180, 240) + ' \n' +
-                        expected.slice(240, 300) + '\n' +
-                        expected.slice(300, 360) + '\n';
+  const expectedWhite = `${expected.slice(0, 60)} \n` +
+                        `${expected.slice(60, 120)} \n` +
+                        `${expected.slice(120, 180)} \n` +
+                        `${expected.slice(180, 240)} \n` +
+                        `${expected.slice(240, 300)}\n` +
+                        `${expected.slice(300, 360)}\n`;
   b = Buffer.allocUnsafe(1024);
   bytesWritten = b.write(expectedWhite, 0, 'base64');
   assert.strictEqual(quote.length, bytesWritten);
@@ -468,6 +476,10 @@ assert.strictEqual(Buffer.from('=bad'.repeat(1e4), 'base64').length, 0);
 assert.deepStrictEqual(Buffer.from('w0  ', 'base64'),
                        Buffer.from('w0', 'base64'));
 
+// Regression test for https://github.com/nodejs/node/issues/13657.
+assert.deepStrictEqual(Buffer.from(' YWJvcnVtLg', 'base64'),
+                       Buffer.from('YWJvcnVtLg', 'base64'));
+
 {
   // Creating buffers larger than pool size.
   const l = Buffer.poolSize + 5;
@@ -475,7 +487,7 @@ assert.deepStrictEqual(Buffer.from('w0  ', 'base64'),
   const b = Buffer.from(s);
 
   for (let i = 0; i < l; i++) {
-    assert.strictEqual('h'.charCodeAt(0), b[i]);
+    assert.strictEqual(b[i], 'h'.charCodeAt(0));
   }
 
   const sb = b.toString();
@@ -545,16 +557,16 @@ function buildBuffer(data) {
 
 const x = buildBuffer([0x81, 0xa3, 0x66, 0x6f, 0x6f, 0xa3, 0x62, 0x61, 0x72]);
 
-assert.strictEqual('<Buffer 81 a3 66 6f 6f a3 62 61 72>', x.inspect());
+assert.strictEqual(x.inspect(), '<Buffer 81 a3 66 6f 6f a3 62 61 72>');
 
 {
   const z = x.slice(4);
-  assert.strictEqual(5, z.length);
-  assert.strictEqual(0x6f, z[0]);
-  assert.strictEqual(0xa3, z[1]);
-  assert.strictEqual(0x62, z[2]);
-  assert.strictEqual(0x61, z[3]);
-  assert.strictEqual(0x72, z[4]);
+  assert.strictEqual(z.length, 5);
+  assert.strictEqual(z[0], 0x6f);
+  assert.strictEqual(z[1], 0xa3);
+  assert.strictEqual(z[2], 0x62);
+  assert.strictEqual(z[3], 0x61);
+  assert.strictEqual(z[4], 0x72);
 }
 
 {
@@ -564,27 +576,27 @@ assert.strictEqual('<Buffer 81 a3 66 6f 6f a3 62 61 72>', x.inspect());
 
 {
   const z = x.slice(0, 4);
-  assert.strictEqual(4, z.length);
-  assert.strictEqual(0x81, z[0]);
-  assert.strictEqual(0xa3, z[1]);
+  assert.strictEqual(z.length, 4);
+  assert.strictEqual(z[0], 0x81);
+  assert.strictEqual(z[1], 0xa3);
 }
 
 {
   const z = x.slice(0, 9);
-  assert.strictEqual(9, z.length);
+  assert.strictEqual(z.length, 9);
 }
 
 {
   const z = x.slice(1, 4);
-  assert.strictEqual(3, z.length);
-  assert.strictEqual(0xa3, z[0]);
+  assert.strictEqual(z.length, 3);
+  assert.strictEqual(z[0], 0xa3);
 }
 
 {
   const z = x.slice(2, 4);
-  assert.strictEqual(2, z.length);
-  assert.strictEqual(0x66, z[0]);
-  assert.strictEqual(0x6f, z[1]);
+  assert.strictEqual(z.length, 2);
+  assert.strictEqual(z[0], 0x66);
+  assert.strictEqual(z[1], 0x6f);
 }
 
 ['ucs2', 'ucs-2', 'utf16le', 'utf-16le'].forEach((encoding) => {
@@ -604,16 +616,16 @@ assert.strictEqual('<Buffer 81 a3 66 6f 6f a3 62 61 72>', x.inspect());
   const b = Buffer.from([0xde, 0xad, 0xbe, 0xef]);
   let s = String.fromCharCode(0xffff);
   b.write(s, 0, 'latin1');
-  assert.strictEqual(0xff, b[0]);
-  assert.strictEqual(0xad, b[1]);
-  assert.strictEqual(0xbe, b[2]);
-  assert.strictEqual(0xef, b[3]);
+  assert.strictEqual(b[0], 0xff);
+  assert.strictEqual(b[1], 0xad);
+  assert.strictEqual(b[2], 0xbe);
+  assert.strictEqual(b[3], 0xef);
   s = String.fromCharCode(0xaaee);
   b.write(s, 0, 'latin1');
-  assert.strictEqual(0xee, b[0]);
-  assert.strictEqual(0xad, b[1]);
-  assert.strictEqual(0xbe, b[2]);
-  assert.strictEqual(0xef, b[3]);
+  assert.strictEqual(b[0], 0xee);
+  assert.strictEqual(b[1], 0xad);
+  assert.strictEqual(b[2], 0xbe);
+  assert.strictEqual(b[3], 0xef);
 }
 
 {
@@ -621,20 +633,21 @@ assert.strictEqual('<Buffer 81 a3 66 6f 6f a3 62 61 72>', x.inspect());
   const b = Buffer.from([0xde, 0xad, 0xbe, 0xef]);
   let s = String.fromCharCode(0xffff);
   b.write(s, 0, 'latin1');
-  assert.strictEqual(0xff, b[0]);
-  assert.strictEqual(0xad, b[1]);
-  assert.strictEqual(0xbe, b[2]);
-  assert.strictEqual(0xef, b[3]);
+  assert.strictEqual(b[0], 0xff);
+  assert.strictEqual(b[1], 0xad);
+  assert.strictEqual(b[2], 0xbe);
+  assert.strictEqual(b[3], 0xef);
   s = String.fromCharCode(0xaaee);
   b.write(s, 0, 'latin1');
-  assert.strictEqual(0xee, b[0]);
-  assert.strictEqual(0xad, b[1]);
-  assert.strictEqual(0xbe, b[2]);
-  assert.strictEqual(0xef, b[3]);
+  assert.strictEqual(b[0], 0xee);
+  assert.strictEqual(b[1], 0xad);
+  assert.strictEqual(b[2], 0xbe);
+  assert.strictEqual(b[3], 0xef);
 }
 
 {
-  // #1210 Test UTF-8 string includes null character
+  // https://github.com/nodejs/node-v0.x-archive/pull/1210
+  // Test UTF-8 string includes null character
   let buf = Buffer.from('\0');
   assert.strictEqual(buf.length, 1);
   buf = Buffer.from('\0\0');
@@ -643,7 +656,7 @@ assert.strictEqual('<Buffer 81 a3 66 6f 6f a3 62 61 72>', x.inspect());
 
 {
   const buf = Buffer.allocUnsafe(2);
-  assert.strictEqual(buf.write(''), 0); //0bytes
+  assert.strictEqual(buf.write(''), 0); // 0bytes
   assert.strictEqual(buf.write('\0'), 1); // 1byte (v8 adds null terminator)
   assert.strictEqual(buf.write('a\0'), 2); // 1byte * 2
   assert.strictEqual(buf.write('あ'), 0); // 3bytes
@@ -658,7 +671,8 @@ assert.strictEqual('<Buffer 81 a3 66 6f 6f a3 62 61 72>', x.inspect());
 }
 
 {
-  // #243 Test write() with maxLength
+  // https://github.com/nodejs/node-v0.x-archive/issues/243
+  // Test write() with maxLength
   const buf = Buffer.allocUnsafe(4);
   buf.fill(0xFF);
   assert.strictEqual(buf.write('abcd', 1, 2, 'utf8'), 2);
@@ -701,11 +715,11 @@ assert.strictEqual('<Buffer 81 a3 66 6f 6f a3 62 61 72>', x.inspect());
 {
   // test offset returns are correct
   const b = Buffer.allocUnsafe(16);
-  assert.strictEqual(4, b.writeUInt32LE(0, 0));
-  assert.strictEqual(6, b.writeUInt16LE(0, 4));
-  assert.strictEqual(7, b.writeUInt8(0, 6));
-  assert.strictEqual(8, b.writeInt8(0, 7));
-  assert.strictEqual(16, b.writeDoubleLE(0, 8));
+  assert.strictEqual(b.writeUInt32LE(0, 0), 4);
+  assert.strictEqual(b.writeUInt16LE(0, 4), 6);
+  assert.strictEqual(b.writeUInt8(0, 6), 7);
+  assert.strictEqual(b.writeInt8(0, 7), 8);
+  assert.strictEqual(b.writeDoubleLE(0, 8), 16);
 }
 
 {
@@ -748,12 +762,12 @@ assert.strictEqual('<Buffer 81 a3 66 6f 6f a3 62 61 72>', x.inspect());
 
 // Call .fill() first, stops valgrind warning about uninitialized memory reads.
 Buffer.allocUnsafe(3.3).fill().toString();
-  // throws bad argument error in commit 43cb4ec
+// throws bad argument error in commit 43cb4ec
 Buffer.alloc(3.3).fill().toString();
 assert.strictEqual(Buffer.allocUnsafe(NaN).length, 0);
 assert.strictEqual(Buffer.allocUnsafe(3.3).length, 3);
-assert.strictEqual(Buffer.from({length: 3.3}).length, 3);
-assert.strictEqual(Buffer.from({length: 'BAM'}).length, 0);
+assert.strictEqual(Buffer.from({ length: 3.3 }).length, 3);
+assert.strictEqual(Buffer.from({ length: 'BAM' }).length, 0);
 
 // Make sure that strings are not coerced to numbers.
 assert.strictEqual(Buffer.from('99').length, 2);
@@ -776,20 +790,34 @@ assert.strictEqual(Buffer.from('13.37').length, 5);
 Buffer.from(Buffer.allocUnsafe(0), 0, 0);
 
 // issue GH-5587
-assert.throws(() => Buffer.alloc(8).writeFloatLE(0, 5), RangeError);
-assert.throws(() => Buffer.alloc(16).writeDoubleLE(0, 9), RangeError);
+common.expectsError(
+  () => Buffer.alloc(8).writeFloatLE(0, 5),
+  outOfRangeError
+);
+common.expectsError(
+  () => Buffer.alloc(16).writeDoubleLE(0, 9),
+  outOfRangeError
+);
 
-// attempt to overflow buffers, similar to previous bug in array buffers
-assert.throws(() => Buffer.allocUnsafe(8).writeFloatLE(0.0, 0xffffffff),
-              RangeError);
-assert.throws(() => Buffer.allocUnsafe(8).writeFloatLE(0.0, 0xffffffff),
-              RangeError);
-
+// Attempt to overflow buffers, similar to previous bug in array buffers
+common.expectsError(
+  () => Buffer.allocUnsafe(8).writeFloatLE(0.0, 0xffffffff),
+  outOfRangeError
+);
+common.expectsError(
+  () => Buffer.allocUnsafe(8).writeFloatLE(0.0, 0xffffffff),
+  outOfRangeError
+);
 
 // ensure negative values can't get past offset
-assert.throws(() => Buffer.allocUnsafe(8).writeFloatLE(0.0, -1), RangeError);
-assert.throws(() => Buffer.allocUnsafe(8).writeFloatLE(0.0, -1), RangeError);
-
+common.expectsError(
+  () => Buffer.allocUnsafe(8).writeFloatLE(0.0, -1),
+  outOfRangeError
+);
+common.expectsError(
+  () => Buffer.allocUnsafe(8).writeFloatLE(0.0, -1),
+  outOfRangeError
+);
 
 // test for common write(U)IntLE/BE
 {
@@ -884,11 +912,20 @@ assert.throws(() => Buffer.allocUnsafe(8).writeFloatLE(0.0, -1), RangeError);
   assert.strictEqual(buf.readIntBE(0, 5), -0x0012000000);
 }
 
-// Regression test for #5482: should throw but not assert in C++ land.
-assert.throws(() => Buffer.from('', 'buffer'), TypeError);
+// Regression test for https://github.com/nodejs/node-v0.x-archive/issues/5482:
+// should throw but not assert in C++ land.
+common.expectsError(
+  () => Buffer.from('', 'buffer'),
+  {
+    code: 'ERR_UNKNOWN_ENCODING',
+    type: TypeError,
+    message: 'Unknown encoding: buffer'
+  }
+);
 
-// Regression test for #6111. Constructing a buffer from another buffer
-// should a) work, and b) not corrupt the source buffer.
+// Regression test for https://github.com/nodejs/node-v0.x-archive/issues/6111.
+// Constructing a buffer from another buffer should a) work, and b) not corrupt
+// the source buffer.
 {
   const a = [...Array(128).keys()]; // [0, 1, 2, 3, ... 126, 127]
   const b = Buffer.from(a);
@@ -902,7 +939,7 @@ assert.throws(() => Buffer.from('', 'buffer'), TypeError);
   }
 }
 
-if (common.hasCrypto) {
+if (common.hasCrypto) { // eslint-disable-line node-core/crypto-check
   // Test truncation after decode
   const crypto = require('crypto');
 
@@ -914,7 +951,7 @@ if (common.hasCrypto) {
     crypto.createHash('sha1').update(b2).digest('hex')
   );
 } else {
-  common.skip('missing crypto');
+  common.printSkipMessage('missing crypto');
 }
 
 const ps = Buffer.poolSize;
@@ -922,15 +959,24 @@ Buffer.poolSize = 0;
 assert(Buffer.allocUnsafe(1).parent instanceof ArrayBuffer);
 Buffer.poolSize = ps;
 
-// Test Buffer.copy() segfault
-assert.throws(() => Buffer.allocUnsafe(10).copy(),
-              /TypeError: argument should be a Buffer/);
+common.expectsError(
+  () => Buffer.allocUnsafe(10).copy(),
+  {
+    code: 'ERR_INVALID_ARG_TYPE',
+    type: TypeError,
+    message: 'argument must be a buffer'
+  });
 
-const regErrorMsg = new RegExp('First argument must be a string, Buffer, ' +
-                               'ArrayBuffer, Array, or array-like object\\.');
-
-assert.throws(() => Buffer.from(), regErrorMsg);
-assert.throws(() => Buffer.from(null), regErrorMsg);
+assert.throws(() => Buffer.from(), {
+  name: 'TypeError [ERR_INVALID_ARG_TYPE]',
+  message: 'The first argument must be one of type string, Buffer, ' +
+  'ArrayBuffer, Array, or Array-like Object. Received type undefined'
+});
+assert.throws(() => Buffer.from(null), {
+  name: 'TypeError [ERR_INVALID_ARG_TYPE]',
+  message: 'The first argument must be one of type string, Buffer, ' +
+  'ArrayBuffer, Array, or Array-like Object. Received type object'
+});
 
 // Test prototype getters don't throw
 assert.strictEqual(Buffer.prototype.parent, undefined);
@@ -949,20 +995,26 @@ assert.strictEqual(SlowBuffer.prototype.offset, undefined);
                          Buffer.from(''));
 
   // Check pool offset after that by trying to write string into the pool.
-  assert.doesNotThrow(() => Buffer.from('abc'));
+  Buffer.from('abc');
 }
 
 
 // Test that ParseArrayIndex handles full uint32
-assert.throws(() => Buffer.from(new ArrayBuffer(0), -1 >>> 0),
-              /RangeError: 'offset' is out of bounds/);
+{
+  const errMsg = common.expectsError({
+    code: 'ERR_BUFFER_OUT_OF_BOUNDS',
+    type: RangeError,
+    message: '"offset" is outside of buffer bounds'
+  });
+  assert.throws(() => Buffer.from(new ArrayBuffer(0), -1 >>> 0), errMsg);
+}
 
 // ParseArrayIndex() should reject values that don't fit in a 32 bits size_t.
-assert.throws(() => {
+common.expectsError(() => {
   const a = Buffer.alloc(1);
   const b = Buffer.alloc(1);
   a.copy(b, 0, 0x100000000, 0x100000001);
-}, /out of range index/);
+}, outOfRangeError);
 
 // Unpooled buffer (replaces SlowBuffer)
 {
@@ -972,21 +1024,49 @@ assert.throws(() => {
   assert.strictEqual(ubuf.buffer.byteLength, 10);
 }
 
-// Regression test
-assert.doesNotThrow(() => Buffer.from(new ArrayBuffer()));
+// Regression test to verify that an empty ArrayBuffer does not throw.
+Buffer.from(new ArrayBuffer());
 
-// Test that ArrayBuffer from a different context is detected correctly
+// Test that ArrayBuffer from a different context is detected correctly.
 const arrayBuf = vm.runInNewContext('new ArrayBuffer()');
-assert.doesNotThrow(() => Buffer.from(arrayBuf));
-assert.doesNotThrow(() => Buffer.from({ buffer: arrayBuf }));
+Buffer.from(arrayBuf);
+Buffer.from({ buffer: arrayBuf });
 
 assert.throws(() => Buffer.alloc({ valueOf: () => 1 }),
-              /"size" argument must be a number/);
+              /"size" argument must be of type number/);
 assert.throws(() => Buffer.alloc({ valueOf: () => -1 }),
-              /"size" argument must be a number/);
+              /"size" argument must be of type number/);
 
 assert.strictEqual(Buffer.prototype.toLocaleString, Buffer.prototype.toString);
 {
   const buf = Buffer.from('test');
   assert.strictEqual(buf.toLocaleString(), buf.toString());
 }
+
+common.expectsError(() => {
+  Buffer.alloc(0x1000, 'This is not correctly encoded', 'hex');
+}, {
+  code: 'ERR_INVALID_ARG_VALUE',
+  type: TypeError
+});
+
+common.expectsError(() => {
+  Buffer.alloc(0x1000, 'c', 'hex');
+}, {
+  code: 'ERR_INVALID_ARG_VALUE',
+  type: TypeError
+});
+
+common.expectsError(() => {
+  Buffer.alloc(1, Buffer.alloc(0));
+}, {
+  code: 'ERR_INVALID_ARG_VALUE',
+  type: TypeError
+});
+
+common.expectsError(() => {
+  Buffer.alloc(40, 'x', 20);
+}, {
+  code: 'ERR_INVALID_ARG_TYPE',
+  type: TypeError
+});

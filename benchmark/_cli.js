@@ -49,7 +49,7 @@ function CLI(usage, settings) {
         this.optional[currentOptional] = true;
         mode = 'both';
       } else {
-        // expect the next value to be option related (either -- or the value)
+        // Expect the next value to be option related (either -- or the value)
         mode = 'option';
       }
     } else if (mode === 'option') {
@@ -88,6 +88,8 @@ CLI.prototype.benchmarks = function() {
   const filter = this.optional.filter || false;
 
   for (const category of this.items) {
+    if (benchmarks[category] === undefined)
+      continue;
     for (const scripts of benchmarks[category]) {
       if (filter && scripts.lastIndexOf(filter) === -1) continue;
 

@@ -4,7 +4,7 @@ const assert = require('assert');
 const stream = require('stream');
 const Writable = stream.Writable;
 
-// Test the buffering behaviour of Writable streams.
+// Test the buffering behavior of Writable streams.
 //
 // The call to cork() triggers storing chunks which are flushed
 // on calling uncork() in the same tick.
@@ -65,7 +65,7 @@ writeChunks(inputChunks, () => {
   // trigger writing out the buffer
   w.uncork();
 
-  // buffered bytes shoud be seen in current tick
+  // buffered bytes should be seen in current tick
   assert.strictEqual(seenChunks.length, 4);
 
   // did the chunks match
@@ -74,7 +74,7 @@ writeChunks(inputChunks, () => {
     // there was a chunk
     assert.ok(seen);
 
-    const expected = new Buffer(expectedChunks[i]);
+    const expected = Buffer.from(expectedChunks[i]);
     // it was what we expected
     assert.ok(seen.equals(expected));
   }

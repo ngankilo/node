@@ -19,11 +19,10 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "node_crypto_clienthello.h"
 #include "node_crypto_clienthello-inl.h"
-#include "node_buffer.h"  // Buffer
 
 namespace node {
+namespace crypto {
 
 void ClientHelloParser::Parse(const uint8_t* data, size_t avail) {
   switch (state_) {
@@ -89,23 +88,23 @@ void ClientHelloParser::ParseHeader(const uint8_t* data, size_t avail) {
   if (data[body_offset_ + 4] != 0x03 ||
       data[body_offset_ + 5] < 0x01 ||
       data[body_offset_ + 5] > 0x03) {
-    goto fail;
+    return End();
   }
 
   if (data[body_offset_] == kClientHello) {
     if (state_ == kTLSHeader) {
       if (!ParseTLSClientHello(data, avail))
-        goto fail;
+        return End();
     } else {
       // We couldn't get here, but whatever
-      goto fail;
+      return End();
     }
 
     // Check if we overflowed (do not reply with any private data)
     if (session_id_ == nullptr ||
         session_size_ > 32 ||
         session_id_ + session_size_ > data + avail) {
-      goto fail;
+      return End();
     }
   }
 
@@ -117,10 +116,6 @@ void ClientHelloParser::ParseHeader(const uint8_t* data, size_t avail) {
   hello.servername_ = servername_;
   hello.servername_size_ = static_cast<uint8_t>(servername_size_);
   onhello_cb_(cb_arg_, hello);
-  return;
-
- fail:
-  return End();
 }
 
 
@@ -245,4 +240,5 @@ bool ClientHelloParser::ParseTLSClientHello(const uint8_t* data, size_t avail) {
   return true;
 }
 
+}  // namespace crypto
 }  // namespace node

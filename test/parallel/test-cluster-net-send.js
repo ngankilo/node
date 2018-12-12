@@ -26,7 +26,7 @@ const fork = require('child_process').fork;
 const net = require('net');
 
 if (process.argv[2] !== 'child') {
-  console.error('[%d] master', process.pid);
+  console.error(`[${process.pid}] master`);
 
   const worker = fork(__filename, ['child']);
   let called = false;
@@ -50,7 +50,7 @@ if (process.argv[2] !== 'child') {
     assert.ok(called);
   });
 } else {
-  console.error('[%d] worker', process.pid);
+  console.error(`[${process.pid}] worker`);
 
   let socket;
   let cbcalls = 0;
@@ -67,8 +67,8 @@ if (process.argv[2] !== 'child') {
     socketConnected();
   });
 
-  server.listen(common.PORT, function() {
-    socket = net.connect(common.PORT, '127.0.0.1', socketConnected);
+  server.listen(0, function() {
+    socket = net.connect(server.address().port, '127.0.0.1', socketConnected);
   });
 
   process.on('disconnect', function() {

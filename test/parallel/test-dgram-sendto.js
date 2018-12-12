@@ -4,21 +4,34 @@ const assert = require('assert');
 const dgram = require('dgram');
 const socket = dgram.createSocket('udp4');
 
-const errorMessage =
-  /^Error: Send takes "offset" and "length" as args 2 and 3$/;
+const errObj = {
+  code: 'ERR_INVALID_ARG_TYPE',
+  name: 'TypeError [ERR_INVALID_ARG_TYPE]',
+  message: 'The "offset" argument must be of type number. Received type ' +
+           'undefined'
+};
+assert.throws(() => socket.sendto(), errObj);
 
-assert.throws(() => {
-  socket.sendto();
-}, errorMessage);
+errObj.message = 'The "length" argument must be of type number. Received ' +
+                 'type string';
+assert.throws(
+  () => socket.sendto('buffer', 1, 'offset', 'port', 'address', 'cb'),
+  errObj);
 
-assert.throws(() => {
-  socket.sendto('buffer', 1, 'offset', 'port', 'address', 'cb');
-}, errorMessage);
+errObj.message = 'The "offset" argument must be of type number. Received ' +
+                 'type string';
+assert.throws(
+  () => socket.sendto('buffer', 'offset', 1, 'port', 'address', 'cb'),
+  errObj);
 
-assert.throws(() => {
-  socket.sendto('buffer', 'offset', 1, 'port', 'address', 'cb');
-}, errorMessage);
+errObj.message = 'The "address" argument must be of type string. Received ' +
+                 'type boolean';
+assert.throws(
+  () => socket.sendto('buffer', 1, 1, 10, false, 'cb'),
+  errObj);
 
-assert.throws(() => {
-  socket.sendto('buffer', 1, 1, 10, false, 'cb');
-}, /^Error: udp4 sockets must send to port, address$/);
+errObj.message = 'The "port" argument must be of type number. Received ' +
+                 'type boolean';
+assert.throws(
+  () => socket.sendto('buffer', 1, 1, false, 'address', 'cb'),
+  errObj);

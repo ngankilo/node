@@ -31,20 +31,22 @@ let child;
 function after(err, stdout, stderr) {
   if (err) {
     error_count++;
-    console.log('error!: ' + err.code);
-    console.log('stdout: ' + JSON.stringify(stdout));
-    console.log('stderr: ' + JSON.stringify(stderr));
-    assert.strictEqual(false, err.killed);
+    console.log(`error!: ${err.code}`);
+    console.log(`stdout: ${JSON.stringify(stdout)}`);
+    console.log(`stderr: ${JSON.stringify(stderr)}`);
+    assert.strictEqual(err.killed, false);
   } else {
     success_count++;
-    assert.notStrictEqual('', stdout);
+    assert.notStrictEqual(stdout, '');
   }
 }
 
 if (!common.isWindows) {
   child = exec('/usr/bin/env', { env: { 'HELLO': 'WORLD' } }, after);
 } else {
-  child = exec('set', { env: { 'HELLO': 'WORLD' } }, after);
+  child = exec('set',
+               { env: Object.assign({}, process.env, { 'HELLO': 'WORLD' }) },
+               after);
 }
 
 child.stdout.setEncoding('utf8');
@@ -54,7 +56,7 @@ child.stdout.on('data', function(chunk) {
 
 process.on('exit', function() {
   console.log('response: ', response);
-  assert.strictEqual(1, success_count);
-  assert.strictEqual(0, error_count);
-  assert.ok(response.indexOf('HELLO=WORLD') >= 0);
+  assert.strictEqual(success_count, 1);
+  assert.strictEqual(error_count, 0);
+  assert.ok(response.includes('HELLO=WORLD'));
 });

@@ -13,6 +13,8 @@ bool InstructionScheduler::SchedulerSupported() { return true; }
 int InstructionScheduler::GetTargetInstructionFlags(
     const Instruction* instr) const {
   switch (instr->arch_opcode()) {
+    case kS390_Abs32:
+    case kS390_Abs64:
     case kS390_And32:
     case kS390_And64:
     case kS390_Or32:
@@ -35,6 +37,7 @@ int InstructionScheduler::GetTargetInstructionFlags(
     case kS390_RotLeftAndClear64:
     case kS390_RotLeftAndClearLeft64:
     case kS390_RotLeftAndClearRight64:
+    case kS390_Lay:
     case kS390_Add32:
     case kS390_Add64:
     case kS390_AddPair:
@@ -47,7 +50,7 @@ int InstructionScheduler::GetTargetInstructionFlags(
     case kS390_SubFloat:
     case kS390_SubDouble:
     case kS390_Mul32:
-    case kS390_Mul32WithHigh32:
+    case kS390_Mul32WithOverflow:
     case kS390_Mul64:
     case kS390_MulHigh32:
     case kS390_MulHighU32:
@@ -93,9 +96,11 @@ int InstructionScheduler::GetTargetInstructionFlags(
     case kS390_CmpDouble:
     case kS390_Tst32:
     case kS390_Tst64:
-    case kS390_ExtendSignWord8:
-    case kS390_ExtendSignWord16:
-    case kS390_ExtendSignWord32:
+    case kS390_SignExtendWord8ToInt32:
+    case kS390_SignExtendWord16ToInt32:
+    case kS390_SignExtendWord8ToInt64:
+    case kS390_SignExtendWord16ToInt64:
+    case kS390_SignExtendWord32ToInt64:
     case kS390_Uint32ToUint64:
     case kS390_Int64ToInt32:
     case kS390_Int64ToFloat32:
@@ -129,6 +134,10 @@ int InstructionScheduler::GetTargetInstructionFlags(
     case kS390_LoadReverse16RR:
     case kS390_LoadReverse32RR:
     case kS390_LoadReverse64RR:
+    case kS390_LoadAndTestWord32:
+    case kS390_LoadAndTestWord64:
+    case kS390_LoadAndTestFloat32:
+    case kS390_LoadAndTestFloat64:
       return kNoOpcodeFlags;
 
     case kS390_LoadWordS8:
@@ -157,6 +166,47 @@ int InstructionScheduler::GetTargetInstructionFlags(
     case kS390_Push:
     case kS390_PushFrame:
     case kS390_StoreToStackSlot:
+    case kS390_StackClaim:
+      return kHasSideEffect;
+
+    case kS390_Word64AtomicLoadUint8:
+    case kS390_Word64AtomicLoadUint16:
+    case kS390_Word64AtomicLoadUint32:
+    case kS390_Word64AtomicLoadUint64:
+      return kIsLoadOperation;
+
+    case kS390_Word64AtomicStoreUint8:
+    case kS390_Word64AtomicStoreUint16:
+    case kS390_Word64AtomicStoreUint32:
+    case kS390_Word64AtomicStoreUint64:
+    case kS390_Word64AtomicExchangeUint8:
+    case kS390_Word64AtomicExchangeUint16:
+    case kS390_Word64AtomicExchangeUint32:
+    case kS390_Word64AtomicExchangeUint64:
+    case kS390_Word64AtomicCompareExchangeUint8:
+    case kS390_Word64AtomicCompareExchangeUint16:
+    case kS390_Word64AtomicCompareExchangeUint32:
+    case kS390_Word64AtomicCompareExchangeUint64:
+    case kS390_Word64AtomicAddUint8:
+    case kS390_Word64AtomicAddUint16:
+    case kS390_Word64AtomicAddUint32:
+    case kS390_Word64AtomicAddUint64:
+    case kS390_Word64AtomicSubUint8:
+    case kS390_Word64AtomicSubUint16:
+    case kS390_Word64AtomicSubUint32:
+    case kS390_Word64AtomicSubUint64:
+    case kS390_Word64AtomicAndUint8:
+    case kS390_Word64AtomicAndUint16:
+    case kS390_Word64AtomicAndUint32:
+    case kS390_Word64AtomicAndUint64:
+    case kS390_Word64AtomicOrUint8:
+    case kS390_Word64AtomicOrUint16:
+    case kS390_Word64AtomicOrUint32:
+    case kS390_Word64AtomicOrUint64:
+    case kS390_Word64AtomicXorUint8:
+    case kS390_Word64AtomicXorUint16:
+    case kS390_Word64AtomicXorUint32:
+    case kS390_Word64AtomicXorUint64:
       return kHasSideEffect;
 
 #define CASE(Name) case k##Name:
@@ -167,7 +217,6 @@ int InstructionScheduler::GetTargetInstructionFlags(
   }
 
   UNREACHABLE();
-  return kNoOpcodeFlags;
 }
 
 int InstructionScheduler::GetInstructionLatency(const Instruction* instr) {

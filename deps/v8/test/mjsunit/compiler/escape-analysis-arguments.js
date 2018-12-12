@@ -25,7 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax --use-escape-analysis --expose-gc
+// Flags: --allow-natives-syntax --expose-gc
 
 
 // Simple test of capture
@@ -184,4 +184,57 @@
   f(); f();
   %OptimizeFunctionOnNextCall(f);
   f(); f();
+})();
+
+// Test variable index access to strict arguments
+// with up to 2 elements.
+(function testArgumentsVariableIndexStrict() {
+  function g() {
+    "use strict";
+    var s = 0;
+    for (var i = 0; i < arguments.length; ++i) s += arguments[i];
+    return s;
+  }
+
+  function f(x, y) {
+    // (a) arguments[i] is dead code since arguments.length is 0.
+    const a = g();
+    // (b) arguments[i] always yields the first element.
+    const b = g(x);
+    // (c) arguments[i] can yield either x or y.
+    const c = g(x, y);
+    return a + b + c;
+  }
+
+  assertEquals(4, f(1, 2));
+  assertEquals(5, f(2, 1));
+  %OptimizeFunctionOnNextCall(f);
+  assertEquals(4, f(1, 2));
+  assertEquals(5, f(2, 1));
+})();
+
+// Test variable index access to sloppy arguments
+// with up to 2 elements.
+(function testArgumentsVariableIndexSloppy() {
+  function g() {
+    var s = 0;
+    for (var i = 0; i < arguments.length; ++i) s += arguments[i];
+    return s;
+  }
+
+  function f(x, y) {
+    // (a) arguments[i] is dead code since arguments.length is 0.
+    const a = g();
+    // (b) arguments[i] always yields the first element.
+    const b = g(x);
+    // (c) arguments[i] can yield either x or y.
+    const c = g(x, y);
+    return a + b + c;
+  }
+
+  assertEquals(4, f(1, 2));
+  assertEquals(5, f(2, 1));
+  %OptimizeFunctionOnNextCall(f);
+  assertEquals(4, f(1, 2));
+  assertEquals(5, f(2, 1));
 })();

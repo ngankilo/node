@@ -1,18 +1,18 @@
 #include "node.h"
 #include "node_i18n.h"
-#include "env.h"
+#include "node_options-inl.h"
 #include "env-inl.h"
-#include "util.h"
 #include "util-inl.h"
-
 
 namespace node {
 
+using v8::Boolean;
 using v8::Context;
+using v8::Integer;
+using v8::Isolate;
 using v8::Local;
+using v8::Number;
 using v8::Object;
-using v8::ReadOnly;
-using v8::String;
 using v8::Value;
 
 // The config binding is used to provide an internal view of compile or runtime
@@ -20,46 +20,95 @@ using v8::Value;
 // alternative to dropping additional properties onto the process object as
 // has been the practice previously in node.cc.
 
-#define READONLY_BOOLEAN_PROPERTY(str)                                        \
-  do {                                                                        \
-    target->DefineOwnProperty(env->context(),                                 \
-                              OneByteString(env->isolate(), str),             \
-                              True(env->isolate()), ReadOnly).FromJust();     \
-  } while (0)
-
-void InitConfig(Local<Object> target,
-                Local<Value> unused,
-                Local<Context> context) {
+static void Initialize(Local<Object> target,
+                       Local<Value> unused,
+                       Local<Context> context) {
   Environment* env = Environment::GetCurrent(context);
+  Isolate* isolate = env->isolate();
+
+#ifdef NODE_FIPS_MODE
+  READONLY_TRUE_PROPERTY(target, "fipsMode");
+  // TODO(addaleax): Use options parser variable instead.
+  if (per_process_opts->force_fips_crypto)
+    READONLY_TRUE_PROPERTY(target, "fipsForced");
+#endif
+
 #ifdef NODE_HAVE_I18N_SUPPORT
 
-  READONLY_BOOLEAN_PROPERTY("hasIntl");
+  READONLY_TRUE_PROPERTY(target, "hasIntl");
 
 #ifdef NODE_HAVE_SMALL_ICU
-  READONLY_BOOLEAN_PROPERTY("hasSmallICU");
+  READONLY_TRUE_PROPERTY(target, "hasSmallICU");
 #endif  // NODE_HAVE_SMALL_ICU
 
-  target->DefineOwnProperty(env->context(),
-                            OneByteString(env->isolate(), "icuDataDir"),
-                            OneByteString(env->isolate(), icu_data_dir.data()))
-      .FromJust();
+#if NODE_USE_V8_PLATFORM
+  READONLY_TRUE_PROPERTY(target, "hasTracing");
+#endif
+
+#if !defined(NODE_WITHOUT_NODE_OPTIONS)
+  READONLY_TRUE_PROPERTY(target, "hasNodeOptions");
+#endif
+
+  // TODO(addaleax): This seems to be an unused, private API. Remove it?
+  READONLY_STRING_PROPERTY(target, "icuDataDir",
+      per_process_opts->icu_data_dir);
 
 #endif  // NODE_HAVE_I18N_SUPPORT
 
-  if (config_preserve_symlinks)
-    READONLY_BOOLEAN_PROPERTY("preserveSymlinks");
+  if (env->options()->preserve_symlinks)
+    READONLY_TRUE_PROPERTY(target, "preserveSymlinks");
+  if (env->options()->preserve_symlinks_main)
+    READONLY_TRUE_PROPERTY(target, "preserveSymlinksMain");
 
-  if (!config_warning_file.empty()) {
-    Local<String> name = OneByteString(env->isolate(), "warningFile");
-    Local<String> value = String::NewFromUtf8(env->isolate(),
-                                              config_warning_file.data(),
-                                              v8::NewStringType::kNormal,
-                                              config_warning_file.size())
-                                                .ToLocalChecked();
-    target->DefineOwnProperty(env->context(), name, value).FromJust();
+  if (env->options()->experimental_modules) {
+    READONLY_TRUE_PROPERTY(target, "experimentalModules");
+    const std::string& userland_loader = env->options()->userland_loader;
+    if (!userland_loader.empty()) {
+      READONLY_STRING_PROPERTY(target, "userLoader",  userland_loader);
+    }
   }
+
+  if (env->options()->experimental_vm_modules)
+    READONLY_TRUE_PROPERTY(target, "experimentalVMModules");
+
+  if (env->options()->experimental_worker)
+    READONLY_TRUE_PROPERTY(target, "experimentalWorker");
+
+  if (env->options()->experimental_repl_await)
+    READONLY_TRUE_PROPERTY(target, "experimentalREPLAwait");
+
+  if (env->options()->pending_deprecation)
+    READONLY_TRUE_PROPERTY(target, "pendingDeprecation");
+
+  if (env->options()->expose_internals)
+    READONLY_TRUE_PROPERTY(target, "exposeInternals");
+
+  if (env->abort_on_uncaught_exception())
+    READONLY_TRUE_PROPERTY(target, "shouldAbortOnUncaughtException");
+
+  READONLY_PROPERTY(target,
+                    "bits",
+                    Number::New(env->isolate(), 8 * sizeof(intptr_t)));
+
+  const std::string& warning_file = env->options()->redirect_warnings;
+  if (!warning_file.empty()) {
+    READONLY_STRING_PROPERTY(target, "warningFile", warning_file);
+  }
+
+  Local<Object> debug_options_obj = Object::New(isolate);
+  READONLY_PROPERTY(target, "debugOptions", debug_options_obj);
+
+  const DebugOptions& debug_options = env->options()->debug_options();
+  READONLY_PROPERTY(debug_options_obj,
+                    "inspectorEnabled",
+                    Boolean::New(isolate, debug_options.inspector_enabled));
+  READONLY_STRING_PROPERTY(
+      debug_options_obj, "host", debug_options.host_port.host());
+  READONLY_PROPERTY(debug_options_obj,
+                    "port",
+                    Integer::New(isolate, debug_options.host_port.port()));
 }  // InitConfig
 
 }  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(config, node::InitConfig)
+NODE_MODULE_CONTEXT_AWARE_INTERNAL(config, node::Initialize)

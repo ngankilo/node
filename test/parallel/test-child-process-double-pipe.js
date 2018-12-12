@@ -23,7 +23,6 @@
 const common = require('../common');
 const assert = require('assert');
 const os = require('os');
-const util = require('util');
 const spawn = require('child_process').spawn;
 
 // We're trying to reproduce:
@@ -56,7 +55,7 @@ if (common.isWindows) {
 
 // pipe echo | grep
 echo.stdout.on('data', function(data) {
-  console.error('grep stdin write ' + data.length);
+  console.error(`grep stdin write ${data.length}`);
   if (!grep.stdin.write(data)) {
     echo.stdout.pause();
   }
@@ -86,7 +85,7 @@ sed.on('exit', function() {
 
 // pipe grep | sed
 grep.stdout.on('data', function(data) {
-  console.error('grep stdout ' + data.length);
+  console.error(`grep stdout ${data.length}`);
   if (!sed.stdin.write(data)) {
     grep.stdout.pause();
   }
@@ -108,7 +107,7 @@ let result = '';
 // print sed's output
 sed.stdout.on('data', function(data) {
   result += data.toString('utf8', 0, data.length);
-  util.print(data);
+  console.log(data);
 });
 
 sed.stdout.on('end', function(code) {

@@ -19,24 +19,27 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// Flags: --expose-internals
 'use strict';
 const common = require('../common');
 
-if (!common.hasCrypto) {
+if (!common.hasCrypto)
   common.skip('missing crypto');
-  return;
-}
-const tls = require('tls');
 
-const fs = require('fs');
+const { internalBinding } = require('internal/test/binding');
+const tls = require('tls');
+const fixtures = require('../common/fixtures');
+const { ShutdownWrap } = internalBinding('stream_wrap');
 
 const server = tls.createServer({
-  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
-  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
+  key: fixtures.readKey('agent1-key.pem'),
+  cert: fixtures.readKey('agent1-cert.pem')
 }, function(c) {
   // Send close-notify without shutting down TCP socket
-  if (c._handle.shutdownSSL() !== 1)
-    c._handle.shutdownSSL();
+  const req = new ShutdownWrap();
+  req.oncomplete = common.mustCall(() => {});
+  req.handle = c._handle;
+  c._handle.shutdown(req);
 }).listen(0, common.mustCall(function() {
   const c = tls.connect(this.address().port, {
     rejectUnauthorized: false

@@ -1,7 +1,9 @@
+// Flags: --expose-internals
 'use strict';
 require('../common');
 const assert = require('assert');
-const Signal = process.binding('signal_wrap').Signal;
+const { internalBinding } = require('internal/test/binding');
+const { Signal } = internalBinding('signal_wrap');
 
 // Test Signal `this` safety
 // https://github.com/joyent/node/issues/6690
@@ -9,4 +11,4 @@ assert.throws(function() {
   const s = new Signal();
   const nots = { start: s.start };
   nots.start(9);
-}, TypeError);
+}, /^TypeError: Illegal invocation$/);

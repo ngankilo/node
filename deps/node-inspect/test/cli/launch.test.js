@@ -5,17 +5,78 @@ const { test } = require('tap');
 
 const startCLI = require('./start-cli');
 
-test('examples/empty.js', (t) => {
-  const script = Path.join('examples', 'empty.js');
-  const cli = startCLI([script]);
+test('custom port', (t) => {
+  const CUSTOM_PORT = '9230';
+  const script = Path.join('examples', 'three-lines.js');
 
-  return cli.waitFor(/break/)
+  const cli = startCLI([`--port=${CUSTOM_PORT}`, script]);
+
+  return cli.waitForInitialBreak()
     .then(() => cli.waitForPrompt())
     .then(() => {
       t.match(cli.output, 'debug>', 'prints a prompt');
       t.match(
         cli.output,
-        '< Debugger listening on port 9229',
+        new RegExp(`< Debugger listening on [^\n]*${CUSTOM_PORT}`),
+        'forwards child output');
+    })
+    .then(() => cli.quit())
+    .then((code) => {
+      t.equal(code, 0, 'exits with success');
+    });
+});
+
+test('random port', (t) => {
+  const script = Path.join('examples', 'three-lines.js');
+
+  const cli = startCLI(['--port=0', script]);
+
+  return cli.waitForInitialBreak()
+    .then(() => cli.waitForPrompt())
+    .then(() => {
+      t.match(cli.output, 'debug>', 'prints a prompt');
+      t.match(
+        cli.output,
+        /< Debugger listening on /,
+        'forwards child output');
+    })
+    .then(() => cli.quit())
+    .then((code) => {
+      t.equal(code, 0, 'exits with success');
+    });
+});
+
+test('random port with --inspect-port=0', (t) => {
+  const script = Path.join('examples', 'three-lines.js');
+
+  const cli = startCLI([script], ['--inspect-port=0']);
+
+  return cli.waitForInitialBreak()
+    .then(() => cli.waitForPrompt())
+    .then(() => {
+      t.match(cli.output, 'debug>', 'prints a prompt');
+      t.match(
+        cli.output,
+        /< Debugger listening on /,
+        'forwards child output');
+    })
+    .then(() => cli.quit())
+    .then((code) => {
+      t.equal(code, 0, 'exits with success');
+    });
+});
+
+test('examples/three-lines.js', (t) => {
+  const script = Path.join('examples', 'three-lines.js');
+  const cli = startCLI([script]);
+
+  return cli.waitForInitialBreak()
+    .then(() => cli.waitForPrompt())
+    .then(() => {
+      t.match(cli.output, 'debug>', 'prints a prompt');
+      t.match(
+        cli.output,
+        /< Debugger listening on [^\n]*9229/,
         'forwards child output');
     })
     .then(() => cli.command('["hello", "world"].join(" ")'))
@@ -45,7 +106,7 @@ test('run after quit / restart', (t) => {
     throw error;
   }
 
-  return cli.waitFor(/break/)
+  return cli.waitForInitialBreak()
     .then(() => cli.waitForPrompt())
     .then(() => cli.stepCommand('n'))
     .then(() => {
@@ -72,6 +133,7 @@ test('run after quit / restart', (t) => {
       t.match(cli.output, 'Use `run` to start the app again');
     })
     .then(() => cli.stepCommand('run'))
+    .then(() => cli.waitForInitialBreak())
     .then(() => cli.waitForPrompt())
     .then(() => {
       t.match(
@@ -87,6 +149,7 @@ test('run after quit / restart', (t) => {
         'steps to the 2nd line');
     })
     .then(() => cli.stepCommand('restart'))
+    .then(() => cli.waitForInitialBreak())
     .then(() => {
       t.match(
         cli.output,
@@ -100,6 +163,7 @@ test('run after quit / restart', (t) => {
       t.match(cli.output, 'Use `run` to start the app again');
     })
     .then(() => cli.stepCommand('run'))
+    .then(() => cli.waitForInitialBreak())
     .then(() => cli.waitForPrompt())
     .then(() => {
       t.match(

@@ -1,24 +1,19 @@
 #ifndef SRC_INSPECTOR_IO_H_
 #define SRC_INSPECTOR_IO_H_
 
+#if defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
+
 #include "inspector_socket_server.h"
-#include "node_debug_options.h"
 #include "node_mutex.h"
 #include "uv.h"
 
 #include <memory>
 #include <stddef.h>
-#include <vector>
 
 #if !HAVE_INSPECTOR
 #error("This header can only be used when inspector is enabled")
 #endif
 
-
-// Forward declaration to break recursive dependency chain with src/env.h.
-namespace node {
-class Environment;
-}  // namespace node
 
 namespace v8_inspector {
 class StringBuffer;
@@ -26,100 +21,77 @@ class StringView;
 }  // namespace v8_inspector
 
 namespace node {
+// Forward declaration to break recursive dependency chain with src/env.h.
+class Environment;
 namespace inspector {
 
+std::string FormatWsAddress(const std::string& host, int port,
+                            const std::string& target_id,
+                            bool include_protocol);
+
 class InspectorIoDelegate;
+class MainThreadHandle;
+class RequestQueue;
 
-enum class InspectorAction {
-  kStartSession, kEndSession, kSendMessage
-};
-
+// kKill closes connections and stops the server, kStop only stops the server
 enum class TransportAction {
-  kSendMessage, kStop
+  kKill,
+  kSendMessage,
+  kStop
 };
 
 class InspectorIo {
  public:
-  InspectorIo(node::Environment* env, v8::Platform* platform,
-              const std::string& path, const DebugOptions& options);
+  // Start the inspector agent thread, waiting for it to initialize
+  // bool Start();
+  // Returns empty pointer if thread was not started
+  static std::unique_ptr<InspectorIo> Start(
+      std::shared_ptr<MainThreadHandle> main_thread,
+      const std::string& path,
+      std::shared_ptr<HostPort> host_port);
 
-  // Start the inspector agent thread
-  bool Start();
-  // Stop the inspector agent
-  void Stop();
+  // Will block till the transport thread shuts down
+  ~InspectorIo();
 
-  bool IsStarted();
-  bool IsConnected();
-  void WaitForDisconnect();
-
-  void PostIncomingMessage(InspectorAction action, int session_id,
-                           const std::string& message);
-  void ResumeStartup() {
-    uv_sem_post(&start_sem_);
-  }
+  void StopAcceptingNewConnections();
+  const std::string& host() const { return host_port_->host(); }
+  int port() const { return host_port_->port(); }
+  std::vector<std::string> GetTargetIds() const;
 
  private:
-  template <typename Action>
-  using MessageQueue =
-      std::vector<std::tuple<Action, int,
-                  std::unique_ptr<v8_inspector::StringBuffer>>>;
-  enum class State { kNew, kAccepting, kConnected, kDone, kError };
+  InspectorIo(std::shared_ptr<MainThreadHandle> handle,
+              const std::string& path,
+              std::shared_ptr<HostPort> host_port);
 
-  static void ThreadCbIO(void* agent);
-  static void MainThreadAsyncCb(uv_async_t* req);
+  // Wrapper for agent->ThreadMain()
+  static void ThreadMain(void* agent);
 
-  template <typename Transport> static void WriteCbIO(uv_async_t* async);
-  template <typename Transport> void WorkerRunIO();
-  void SetConnected(bool connected);
-  void DispatchMessages();
-  void Write(TransportAction action, int session_id,
-             const v8_inspector::StringView& message);
-  template <typename ActionType>
-  bool AppendMessage(MessageQueue<ActionType>* vector, ActionType action,
-                     int session_id,
-                     std::unique_ptr<v8_inspector::StringBuffer> buffer);
-  template <typename ActionType>
-  void SwapBehindLock(MessageQueue<ActionType>* vector1,
-                      MessageQueue<ActionType>* vector2);
-  void WaitForFrontendMessage();
-  void NotifyMessageReceived();
-  bool StartThread(bool wait);
+  // Runs a uv_loop_t
+  void ThreadMain();
 
-  // Message queues
-  ConditionVariable incoming_message_cond_;
+  // This is a thread-safe object that will post async tasks. It lives as long
+  // as an Inspector object lives (almost as long as an Isolate).
+  std::shared_ptr<MainThreadHandle> main_thread_;
+  // Used to post on a frontend interface thread, lives while the server is
+  // running
+  std::shared_ptr<RequestQueue> request_queue_;
+  std::shared_ptr<HostPort> host_port_;
 
-  const DebugOptions options_;
-  uv_sem_t start_sem_;
-  Mutex state_lock_;
+  // The IO thread runs its own uv_loop to implement the TCP server off
+  // the main thread.
   uv_thread_t thread_;
 
-  InspectorIoDelegate* delegate_;
-  bool shutting_down_;
-  State state_;
-  node::Environment* parent_env_;
-
-  uv_async_t io_thread_req_;
-  uv_async_t main_thread_req_;
-  std::unique_ptr<InspectorSessionDelegate> session_delegate_;
-  v8::Platform* platform_;
-  MessageQueue<InspectorAction> incoming_message_queue_;
-  MessageQueue<TransportAction> outgoing_message_queue_;
-  bool dispatching_messages_;
-  int session_id_;
-
+  // For setting up interthread communications
+  Mutex thread_start_lock_;
+  ConditionVariable thread_start_condition_;
   std::string script_name_;
-  std::string script_path_;
+  // May be accessed from any thread
   const std::string id_;
-
-  friend class DispatchOnInspectorBackendTask;
-  friend class IoSessionDelegate;
-  friend void InterruptCallback(v8::Isolate*, void* agent);
 };
-
-std::unique_ptr<v8_inspector::StringBuffer> Utf8ToStringView(
-    const std::string& message);
 
 }  // namespace inspector
 }  // namespace node
+
+#endif  // defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
 
 #endif  // SRC_INSPECTOR_IO_H_

@@ -3,49 +3,34 @@ const common = require('../common');
 const assert = require('assert');
 const dgram = require('dgram');
 
-const port = common.PORT;
 const buf = Buffer.from('test');
-const client = dgram.createSocket('udp4');
 
 const onMessage = common.mustCall((err, bytes) => {
   assert.ifError(err);
   assert.strictEqual(bytes, buf.length);
 }, 6);
 
-// valid address: false
-client.send(buf, port, false, onMessage);
+const client = dgram.createSocket('udp4').bind(0, () => {
+  const port = client.address().port;
 
-// valid address: empty string
-client.send(buf, port, '', onMessage);
+  // Check valid addresses
+  [false, '', null, 0, undefined].forEach((address) => {
+    client.send(buf, port, address, onMessage);
+  });
 
-// valid address: null
-client.send(buf, port, null, onMessage);
+  // Valid address: not provided
+  client.send(buf, port, onMessage);
 
-// valid address: 0
-client.send(buf, port, 0, onMessage);
-
-// valid address: undefined
-client.send(buf, port, undefined, onMessage);
-
-// valid address: not provided
-client.send(buf, port, onMessage);
-
-const expectedError = new RegExp('^TypeError: Invalid arguments: address ' +
-  'must be a nonempty string or falsy$');
-
-// invalid address: object
-assert.throws(() => {
-  client.send(buf, port, []);
-}, expectedError);
-
-// invalid address: nonzero number
-assert.throws(() => {
-  client.send(buf, port, 1);
-}, expectedError);
-
-// invalid address: true
-assert.throws(() => {
-  client.send(buf, port, true);
-}, expectedError);
+  // Check invalid addresses
+  [[], 1, true].forEach((invalidInput) => {
+    const expectedError = {
+      code: 'ERR_INVALID_ARG_TYPE',
+      name: 'TypeError [ERR_INVALID_ARG_TYPE]',
+      message: 'The "address" argument must be one of type string or falsy. ' +
+               `Received type ${typeof invalidInput}`
+    };
+    assert.throws(() => client.send(buf, port, invalidInput), expectedError);
+  });
+});
 
 client.unref();

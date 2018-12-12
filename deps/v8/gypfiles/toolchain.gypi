@@ -32,6 +32,7 @@
     'msvs_use_common_release': 0,
     'clang%': 0,
     'asan%': 0,
+    'cfi_vptr%': 0,
     'lsan%': 0,
     'msan%': 0,
     'tsan%': 0,
@@ -57,6 +58,9 @@
     # Similar to the ARM hard float ABI but on MIPS.
     'v8_use_mips_abi_hardfloat%': 'true',
 
+    # MIPS MSA support
+    'mips_use_msa%': 0,
+
     # Print to stdout on Android.
     'v8_android_log_stdout%': 0,
 
@@ -74,7 +78,6 @@
     # Chrome needs this definition unconditionally. For standalone V8 builds,
     # it's handled in gypfiles/standalone.gypi.
     'want_separate_host_toolset%': 1,
-    'want_separate_host_toolset_mkpeephole%': 1,
 
     # Toolset the shell binary should be compiled for. Possible values are
     # 'host' and 'target'.
@@ -129,9 +132,6 @@
       }],
     ],
 
-    # Link-Time Optimizations
-    'use_lto%': 0,
-
     # Indicates if gcmole tools are downloaded by a hook.
     'gcmole%': 0,
   },
@@ -148,7 +148,7 @@
         'host_cxx_is_biarch%': 0,
       },
     }],
-    ['target_arch=="ia32" or target_arch=="x64" or target_arch=="x87" or \
+    ['target_arch=="ia32" or target_arch=="x64" or \
       target_arch=="ppc" or target_arch=="ppc64" or target_arch=="s390" or \
       target_arch=="s390x" or clang==1', {
       'variables': {
@@ -281,17 +281,6 @@
                   }],
                 ],
               }],
-              # Disable GCC LTO for v8
-              # v8 is optimized for speed. Because GCC LTO merges flags at link
-              # time, we disable LTO to prevent any -O2 flags from taking
-              # precedence over v8's -Os flag. However, LLVM LTO does not work
-              # this way so we keep LTO enabled under LLVM.
-              ['clang==0 and use_lto==1', {
-                'cflags!': [
-                  '-flto',
-                  '-ffat-lto-objects',
-                ],
-              }],
             ],
           }],  # _toolset=="target"
         ],
@@ -315,6 +304,8 @@
             'defines': [
               'V8_TARGET_ARCH_S390_LE_SIM',
             ],
+          }, {
+            'cflags': [ '-march=z196' ],
           }],
           ],
       }],  # s390
@@ -355,12 +346,6 @@
           'V8_TARGET_ARCH_IA32',
         ],
       }],  # v8_target_arch=="ia32"
-      ['v8_target_arch=="x87"', {
-        'defines': [
-          'V8_TARGET_ARCH_X87',
-        ],
-        'cflags': ['-march=i586'],
-      }],  # v8_target_arch=="x87"
       ['v8_target_arch=="mips" or v8_target_arch=="mipsel" \
         or v8_target_arch=="mips64" or v8_target_arch=="mips64el"', {
         'target_conditions': [
@@ -457,6 +442,9 @@
                     'cflags': ['-mips32r6'],
                     'ldflags': ['-mips32r6'],
                   }],
+                  ['mips_arch_variant=="r6" and mips_use_msa==1', {
+                    'defines': [ '_MIPS_MSA' ],
+                  }],
                   ['mips_arch_variant=="r2"', {
                     'conditions': [
                       [ 'mips_fpu_mode=="fp64"', {
@@ -525,6 +513,9 @@
                       'FPU_MODE_FP64',
                     ],
                   }],
+                  ['mips_arch_variant=="r6" and mips_use_msa==1', {
+                    'defines': [ '_MIPS_MSA' ],
+                  }],
                   ['mips_arch_variant=="r2"', {
                     'conditions': [
                       [ 'mips_fpu_mode=="fp64"', {
@@ -575,6 +566,9 @@
                   '_MIPS_ARCH_MIPS32R6',
                   'FPU_MODE_FP64',
                 ],
+              }],
+              ['mips_arch_variant=="r6" and mips_use_msa==1', {
+                'defines': [ '_MIPS_MSA' ],
               }],
               ['mips_arch_variant=="r2"', {
                 'conditions': [
@@ -658,6 +652,9 @@
                     'cflags': ['-mips32r6'],
                     'ldflags': ['-mips32r6'],
                   }],
+                  ['mips_arch_variant=="r6" and mips_use_msa==1', {
+                    'defines': [ '_MIPS_MSA' ],
+                  }],
                   ['mips_arch_variant=="r2"', {
                     'conditions': [
                       [ 'mips_fpu_mode=="fp64"', {
@@ -739,6 +736,9 @@
                       'FPU_MODE_FP64',
                     ],
                   }],
+                  ['mips_arch_variant=="r6" and mips_use_msa==1', {
+                    'defines': [ '_MIPS_MSA' ],
+                  }],
                   ['mips_arch_variant=="r2"', {
                     'conditions': [
                       [ 'mips_fpu_mode=="fp64"', {
@@ -795,6 +795,9 @@
                   '_MIPS_ARCH_MIPS32R6',
                   'FPU_MODE_FP64',
                 ],
+              }],
+              ['mips_arch_variant=="r6" and mips_use_msa==1', {
+                'defines': [ '_MIPS_MSA' ],
               }],
               ['mips_arch_variant=="r2"', {
                 'conditions': [
@@ -895,6 +898,9 @@
                     'cflags': ['-mips64r6', '-mabi=64'],
                     'ldflags': ['-mips64r6', '-mabi=64'],
                   }],
+                  ['mips_arch_variant=="r6" and mips_use_msa==1', {
+                    'defines': [ '_MIPS_MSA' ],
+                  }],
                   ['mips_arch_variant=="r2"', {
                     'defines': ['_MIPS_ARCH_MIPS64R2',],
                     'conditions': [
@@ -913,6 +919,9 @@
                   ['mips_arch_variant=="r6"', {
                     'defines': ['_MIPS_ARCH_MIPS64R6',],
                   }],
+                  ['mips_arch_variant=="r6" and mips_use_msa==1', {
+                    'defines': [ '_MIPS_MSA' ],
+                  }],
                   ['mips_arch_variant=="r2"', {
                     'defines': ['_MIPS_ARCH_MIPS64R2',],
                   }],
@@ -924,6 +933,9 @@
             'conditions': [
               ['mips_arch_variant=="r6"', {
                 'defines': ['_MIPS_ARCH_MIPS64R6',],
+              }],
+              ['mips_arch_variant=="r6" and mips_use_msa==1', {
+                'defines': [ '_MIPS_MSA' ],
               }],
               ['mips_arch_variant=="r2"', {
                 'defines': ['_MIPS_ARCH_MIPS64R2',],
@@ -1019,9 +1031,8 @@
       ['(OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris" \
          or OS=="netbsd" or OS=="mac" or OS=="android" or OS=="qnx") and \
         (v8_target_arch=="arm" or v8_target_arch=="ia32" or \
-         v8_target_arch=="x87" or v8_target_arch=="mips" or \
-         v8_target_arch=="mipsel" or v8_target_arch=="ppc" or \
-         v8_target_arch=="s390")', {
+         v8_target_arch=="mips" or v8_target_arch=="mipsel" or \
+         v8_target_arch=="ppc" or v8_target_arch=="s390")', {
         'target_conditions': [
           ['_toolset=="host"', {
             'conditions': [
@@ -1116,135 +1127,23 @@
             'ldflags': [ '-Wl,-bmaxdata:0x60000000/dsa' ],
           }],
           [ 'v8_target_arch=="ppc64"', {
-            'cflags': [ '-maix64' ],
+            'cflags': [ '-maix64', '-fdollars-in-identifiers' ],
             'ldflags': [ '-maix64 -Wl,-bbigtoc' ],
           }],
         ],
       }],
     ],  # conditions
     'configurations': {
-      # Abstract configuration for v8_optimized_debug == 0.
-      'DebugBase0': {
-        'abstract': 1,
-        'msvs_settings': {
-          'VCCLCompilerTool': {
-            'Optimization': '0',
-            'conditions': [
-              ['component=="shared_library" or force_dynamic_crt==1', {
-                'RuntimeLibrary': '3',  # /MDd
-              }, {
-                'RuntimeLibrary': '1',  # /MTd
-              }],
-            ],
-          },
-          'VCLinkerTool': {
-            'LinkIncremental': '2',
-          },
-        },
-        'variables': {
-          'v8_enable_slow_dchecks%': 1,
-        },
-        'conditions': [
-          ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd" or \
-            OS=="qnx" or OS=="aix"', {
-            'cflags!': [
-              '-O3',
-              '-O2',
-              '-O1',
-              '-Os',
-            ],
-            'cflags': [
-              '-fdata-sections',
-              '-ffunction-sections',
-            ],
-          }],
-          ['OS=="mac"', {
-            'xcode_settings': {
-               'GCC_OPTIMIZATION_LEVEL': '0',  # -O0
-            },
-          }],
-          ['v8_enable_slow_dchecks==1', {
-            'defines': [
-              'ENABLE_SLOW_DCHECKS',
-            ],
-          }],
-        ],
-      },  # DebugBase0
-      # Abstract configuration for v8_optimized_debug == 1.
-      'DebugBase1': {
-        'abstract': 1,
-        'msvs_settings': {
-          'VCCLCompilerTool': {
-            'Optimization': '2',
-            'InlineFunctionExpansion': '2',
-            'EnableIntrinsicFunctions': 'true',
-            'FavorSizeOrSpeed': '0',
-            'StringPooling': 'true',
-            'BasicRuntimeChecks': '0',
-            'conditions': [
-              ['component=="shared_library" or force_dynamic_crt==1', {
-                'RuntimeLibrary': '3',  #/MDd
-              }, {
-                'RuntimeLibrary': '1',  #/MTd
-              }],
-            ],
-          },
-          'VCLinkerTool': {
-            'LinkIncremental': '1',
-            'OptimizeReferences': '2',
-            'EnableCOMDATFolding': '2',
-          },
-        },
-        'variables': {
-          'v8_enable_slow_dchecks%': 0,
-        },
-        'conditions': [
-          ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd" or \
-            OS=="qnx" or OS=="aix"', {
-            'cflags!': [
-              '-O0',
-              '-O1',
-              '-Os',
-            ],
-            'cflags': [
-              '-fdata-sections',
-              '-ffunction-sections',
-            ],
-            'conditions': [
-              # Don't use -O3 with sanitizers.
-              ['asan==0 and msan==0 and lsan==0 \
-                and tsan==0 and ubsan==0 and ubsan_vptr==0', {
-                'cflags': ['-O3'],
-                'cflags!': ['-O2'],
-                }, {
-                'cflags': ['-O2'],
-                'cflags!': ['-O3'],
-              }],
-            ],
-          }],
-          ['OS=="mac"', {
-            'xcode_settings': {
-              'GCC_OPTIMIZATION_LEVEL': '3',  # -O3
-              'GCC_STRICT_ALIASING': 'YES',
-            },
-          }],
-          ['v8_enable_slow_dchecks==1', {
-            'defines': [
-              'ENABLE_SLOW_DCHECKS',
-            ],
-          }],
-        ],
-      },  # DebugBase1
-      # Common settings for the Debug configuration.
-      'DebugBaseCommon': {
-        'abstract': 1,
+      'Debug': {
         'defines': [
           'ENABLE_DISASSEMBLER',
           'V8_ENABLE_CHECKS',
           'OBJECT_PRINT',
           'VERIFY_HEAP',
           'DEBUG',
-          'TRACE_MAPS'
+          'V8_TRACE_MAPS',
+          'V8_ENABLE_ALLOCATION_TIMEOUT',
+          'V8_ENABLE_FORCE_SLOW_PATH',
         ],
         'conditions': [
           ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd" or \
@@ -1283,9 +1182,7 @@
               }],
             ],
           }],
-          # TODO(pcc): Re-enable in LTO builds once we've fixed the intermittent
-          # link failures (crbug.com/513074).
-          ['linux_use_gold_flags==1 and use_lto==0', {
+          ['linux_use_gold_flags==1', {
             'target_conditions': [
               ['_toolset=="target"', {
                 'ldflags': [
@@ -1300,23 +1197,126 @@
               }],
             ],
           }],
-        ],
-      },  # DebugBaseCommon
-      'Debug': {
-        'inherit_from': ['DebugBaseCommon'],
-        'conditions': [
           ['v8_optimized_debug==0', {
-            'inherit_from': ['DebugBase0'],
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'Optimization': '0',
+                'conditions': [
+                  ['component=="shared_library" or force_dynamic_crt==1', {
+                    'RuntimeLibrary': '3',  # /MDd
+                  }, {
+                     'RuntimeLibrary': '1',  # /MTd
+                   }],
+                ],
+              },
+              'VCLinkerTool': {
+                'LinkIncremental': '2',
+              },
+            },
+            'variables': {
+              'v8_enable_slow_dchecks%': 1,
+            },
+            'conditions': [
+              ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd" or \
+            OS=="qnx" or OS=="aix"', {
+                'cflags!': [
+                  '-O3',
+                  '-O2',
+                  '-O1',
+                  '-Os',
+                ],
+                'cflags': [
+                  '-fdata-sections',
+                  '-ffunction-sections',
+                ],
+              }],
+              ['OS=="mac"', {
+                'xcode_settings': {
+                  'GCC_OPTIMIZATION_LEVEL': '0',  # -O0
+                },
+              }],
+              ['v8_enable_slow_dchecks==1', {
+                'defines': [
+                  'ENABLE_SLOW_DCHECKS',
+                ],
+              }],
+            ],
           }, {
-            'inherit_from': ['DebugBase1'],
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'Optimization': '2',
+                'InlineFunctionExpansion': '2',
+                'EnableIntrinsicFunctions': 'true',
+                'FavorSizeOrSpeed': '0',
+                'StringPooling': 'true',
+                'BasicRuntimeChecks': '0',
+                'conditions': [
+                  ['component=="shared_library" or force_dynamic_crt==1', {
+                    'RuntimeLibrary': '3',  #/MDd
+                  }, {
+                     'RuntimeLibrary': '1',  #/MTd
+                   }],
+                ],
+              },
+              'VCLinkerTool': {
+                'LinkIncremental': '1',
+                'OptimizeReferences': '2',
+                'EnableCOMDATFolding': '2',
+              },
+            },
+            'variables': {
+              'v8_enable_slow_dchecks%': 0,
+            },
+            'conditions': [
+              ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd" or \
+            OS=="qnx" or OS=="aix"', {
+                'cflags!': [
+                  '-O0',
+                  '-O1',
+                  '-Os',
+                ],
+                'cflags': [
+                  '-fdata-sections',
+                  '-ffunction-sections',
+                ],
+                'conditions': [
+                  # Don't use -O3 with sanitizers.
+                  ['asan==0 and msan==0 and lsan==0 \
+                and tsan==0 and ubsan==0 and ubsan_vptr==0', {
+                    'cflags': ['-O3'],
+                    'cflags!': ['-O2'],
+                  }, {
+                     'cflags': ['-O2'],
+                     'cflags!': ['-O3'],
+                   }],
+                ],
+              }],
+              ['OS=="mac"', {
+                'xcode_settings': {
+                  'GCC_OPTIMIZATION_LEVEL': '3',  # -O3
+                  'GCC_STRICT_ALIASING': 'YES',
+                },
+              }],
+              ['v8_enable_slow_dchecks==1', {
+                'defines': [
+                  'ENABLE_SLOW_DCHECKS',
+                ],
+              }],
+            ],
+          }],
+          # Temporary refs: https://github.com/nodejs/node/pull/23801
+          ['v8_enable_handle_zapping==1', {
+            'defines': ['ENABLE_HANDLE_ZAPPING',],
           }],
         ],
-      },  # Debug
-      'ReleaseBase': {
-        'abstract': 1,
+
+      },  # DebugBaseCommon
+      'Release': {
         'variables': {
           'v8_enable_slow_dchecks%': 0,
         },
+         # Temporary refs: https://github.com/nodejs/node/pull/23801
+        'defines!': ['ENABLE_HANDLE_ZAPPING',],
         'conditions': [
           ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd" \
             or OS=="aix"', {
@@ -1392,27 +1392,25 @@
           }],
         ],  # conditions
       },  # Release
-      'Release': {
-        'inherit_from': ['ReleaseBase'],
-      },  # Debug
-      'conditions': [
-        [ 'OS=="win"', {
-          # TODO(bradnelson): add a gyp mechanism to make this more graceful.
-          'Debug_x64': {
-            'inherit_from': ['DebugBaseCommon'],
-            'conditions': [
-              ['v8_optimized_debug==0', {
-                'inherit_from': ['DebugBase0'],
-              }, {
-                'inherit_from': ['DebugBase1'],
-              }],
-            ],
-          },
-          'Release_x64': {
-            'inherit_from': ['ReleaseBase'],
-          },
-        }],
-      ],
     },  # configurations
+    'msvs_disabled_warnings': [
+      4245,  # Conversion with signed/unsigned mismatch.
+      4267,  # Conversion with possible loss of data.
+      4324,  # Padding structure due to alignment.
+      4701,  # Potentially uninitialized local variable.
+      4702,  # Unreachable code.
+      4703,  # Potentially uninitialized local pointer variable.
+      4709,  # Comma operator within array index expr (bugged).
+      4714,  # Function marked forceinline not inlined.
+
+      # MSVC assumes that control can get past an exhaustive switch and then
+      # warns if there's no return there (see https://crbug.com/v8/7658)
+      4715,  # Not all control paths return a value.
+
+      4718,  # Recursive call has no side-effect.
+      4723,  # https://crbug.com/v8/7771
+      4724,  # https://crbug.com/v8/7771
+      4800,  # Forcing value to bool.
+    ],
   },  # target_defaults
 }

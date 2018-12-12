@@ -42,72 +42,23 @@ const [ InspectClient, createRepl ] =
 
 const debuglog = util.debuglog('inspect');
 
-const DEBUG_PORT_PATTERN = /^--(?:debug|inspect)-port=(\d+)$/;
-function getDefaultPort() {
-  for (const arg of process.execArgv) {
-    const match = arg.match(DEBUG_PORT_PATTERN);
-    if (match) {
-      return +match[1];
-    }
+class StartupError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'StartupError';
   }
-  return 9229;
-}
-
-function runScript(script, scriptArgs, inspectPort, childPrint) {
-  return new Promise((resolve) => {
-    const args = [
-      '--inspect',
-      `--debug-brk=${inspectPort}`,
-    ].concat([script], scriptArgs);
-    const child = spawn(process.execPath, args);
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', childPrint);
-    child.stderr.on('data', childPrint);
-
-    let output = '';
-    function waitForListenHint(text) {
-      output += text;
-      if (/chrome-devtools:\/\//.test(output)) {
-        child.stderr.removeListener('data', waitForListenHint);
-        resolve(child);
-      }
-    }
-
-    child.stderr.on('data', waitForListenHint);
-  });
-}
-
-function createAgentProxy(domain, client) {
-  const agent = new EventEmitter();
-  agent.then = (...args) => {
-    // TODO: potentially fetch the protocol and pretty-print it here.
-    const descriptor = {
-      [util.inspect.custom](depth, { stylize }) {
-        return stylize(`[Agent ${domain}]`, 'special');
-      },
-    };
-    return Promise.resolve(descriptor).then(...args);
-  };
-
-  return new Proxy(agent, {
-    get(target, name) {
-      if (name in target) return target[name];
-      return function callVirtualMethod(params) {
-        return client.callMethod(`${domain}.${name}`, params);
-      };
-    },
-  });
 }
 
 function portIsFree(host, port, timeout = 2000) {
+  if (port === 0) return Promise.resolve();  // Binding to a random port.
+
   const retryDelay = 150;
   let didTimeOut = false;
 
   return new Promise((resolve, reject) => {
     setTimeout(() => {
       didTimeOut = true;
-      reject(new Error(
+      reject(new StartupError(
         `Timeout (${timeout}) waiting for ${host}:${port} to be free`));
     }, timeout);
 
@@ -139,6 +90,59 @@ function portIsFree(host, port, timeout = 2000) {
   });
 }
 
+function runScript(script, scriptArgs, inspectHost, inspectPort, childPrint) {
+  return portIsFree(inspectHost, inspectPort)
+    .then(() => {
+      return new Promise((resolve) => {
+        const needDebugBrk = process.version.match(/^v(6|7)\./);
+        const args = (needDebugBrk ?
+                          ['--inspect', `--debug-brk=${inspectPort}`] :
+                          [`--inspect-brk=${inspectPort}`])
+                         .concat([script], scriptArgs);
+        const child = spawn(process.execPath, args);
+        child.stdout.setEncoding('utf8');
+        child.stderr.setEncoding('utf8');
+        child.stdout.on('data', childPrint);
+        child.stderr.on('data', childPrint);
+
+        let output = '';
+        function waitForListenHint(text) {
+          output += text;
+          if (/Debugger listening on ws:\/\/\[?(.+?)\]?:(\d+)\//.test(output)) {
+            const host = RegExp.$1;
+            const port = Number.parseInt(RegExp.$2);
+            child.stderr.removeListener('data', waitForListenHint);
+            resolve([child, port, host]);
+          }
+        }
+
+        child.stderr.on('data', waitForListenHint);
+      });
+    });
+}
+
+function createAgentProxy(domain, client) {
+  const agent = new EventEmitter();
+  agent.then = (...args) => {
+    // TODO: potentially fetch the protocol and pretty-print it here.
+    const descriptor = {
+      [util.inspect.custom](depth, { stylize }) {
+        return stylize(`[Agent ${domain}]`, 'special');
+      },
+    };
+    return Promise.resolve(descriptor).then(...args);
+  };
+
+  return new Proxy(agent, {
+    get(target, name) {
+      if (name in target) return target[name];
+      return function callVirtualMethod(params) {
+        return client.callMethod(`${domain}.${name}`, params);
+      };
+    },
+  });
+}
+
 class NodeInspector {
   constructor(options, stdin, stdout) {
     this.options = options;
@@ -152,13 +156,15 @@ class NodeInspector {
       this._runScript = runScript.bind(null,
                                        options.script,
                                        options.scriptArgs,
+                                       options.host,
                                        options.port,
                                        this.childPrint.bind(this));
     } else {
-      this._runScript = () => Promise.resolve(null);
+      this._runScript =
+          () => Promise.resolve([null, options.port, options.host]);
     }
 
-    this.client = new InspectClient(options.port, options.host);
+    this.client = new InspectClient();
 
     this.domainNames = ['Debugger', 'HeapProfiler', 'Profiler', 'Runtime'];
     this.domainNames.forEach((domain) => {
@@ -218,14 +224,8 @@ class NodeInspector {
 
   run() {
     this.killChild();
-    const { host, port } = this.options;
 
-    const runOncePortIsFree = () => {
-      return portIsFree(host, port)
-        .then(() => this._runScript());
-    };
-
-    return runOncePortIsFree().then((child) => {
+    return this._runScript().then(([child, port, host]) => {
       this.child = child;
 
       let connectionAttempts = 0;
@@ -233,7 +233,7 @@ class NodeInspector {
         ++connectionAttempts;
         debuglog('connection attempt #%d', connectionAttempts);
         this.stdout.write('.');
-        return this.client.connect()
+        return this.client.connect(port, host)
           .then(() => {
             debuglog('connection established');
             this.stdout.write(' ok');
@@ -288,13 +288,14 @@ class NodeInspector {
 
 function parseArgv([target, ...args]) {
   let host = '127.0.0.1';
-  let port = getDefaultPort();
+  let port = 9229;
   let isRemote = false;
   let script = target;
   let scriptArgs = args;
 
   const hostMatch = target.match(/^([^:]+):(\d+)$/);
   const portMatch = target.match(/^--port=(\d+)$/);
+
   if (hostMatch) {
     // Connecting to remote debugger
     // `node-inspect localhost:9229`
@@ -303,16 +304,31 @@ function parseArgv([target, ...args]) {
     isRemote = true;
     script = null;
   } else if (portMatch) {
-    // Start debugger on custom port
-    // `node debug --port=8058 app.js`
+    // start debugee on custom port
+    // `node inspect --port=9230 script.js`
     port = parseInt(portMatch[1], 10);
     script = args[0];
     scriptArgs = args.slice(1);
+  } else if (args.length === 1 && /^\d+$/.test(args[0]) && target === '-p') {
+    // Start debugger against a given pid
+    const pid = parseInt(args[0], 10);
+    try {
+      process._debugProcess(pid);
+    } catch (e) {
+      if (e.code === 'ESRCH') {
+        /* eslint-disable no-console */
+        console.error(`Target process: ${pid} doesn't exist.`);
+        /* eslint-enable no-console */
+        process.exit(1);
+      }
+      throw e;
+    }
+    script = null;
+    isRemote = true;
   }
 
   return {
-    host, port,
-    isRemote, script, scriptArgs,
+    host, port, isRemote, script, scriptArgs,
   };
 }
 
@@ -327,6 +343,7 @@ function startInspect(argv = process.argv.slice(2),
 
     console.error(`Usage: ${invokedAs} script.js`);
     console.error(`       ${invokedAs} <host>:<port>`);
+    console.error(`       ${invokedAs} -p <pid>`);
     process.exit(1);
   }
 
@@ -336,10 +353,14 @@ function startInspect(argv = process.argv.slice(2),
   stdin.resume();
 
   function handleUnexpectedError(e) {
-    console.error('There was an internal error in node-inspect. ' +
-                  'Please report this bug.');
-    console.error(e.message);
-    console.error(e.stack);
+    if (!(e instanceof StartupError)) {
+      console.error('There was an internal error in node-inspect. ' +
+                    'Please report this bug.');
+      console.error(e.message);
+      console.error(e.stack);
+    } else {
+      console.error(e.message);
+    }
     if (inspector.child) inspector.child.kill();
     process.exit(1);
   }

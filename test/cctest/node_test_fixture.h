@@ -4,44 +4,24 @@
 #include <stdlib.h>
 #include "gtest/gtest.h"
 #include "node.h"
+#include "node_platform.h"
+#include "node_internals.h"
 #include "env.h"
 #include "v8.h"
 #include "libplatform/libplatform.h"
-
-using node::Environment;
-using node::IsolateData;
-using node::CreateIsolateData;
-using node::CreateEnvironment;
-using node::AtExit;
-using node::RunAtExit;
-
-class ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
- public:
-  virtual void* Allocate(size_t length) {
-    return AllocateUninitialized(length);
-  }
-
-  virtual void* AllocateUninitialized(size_t length) {
-    return calloc(length, sizeof(int));
-  }
-
-  virtual void Free(void* data, size_t) {
-    free(data);
-  }
-};
 
 struct Argv {
  public:
   Argv() : Argv({"node", "-p", "process.version"}) {}
 
   Argv(const std::initializer_list<const char*> &args) {
-    int nrArgs = args.size();
-    int totalLen = 0;
+    nr_args_ = args.size();
+    int total_len = 0;
     for (auto it = args.begin(); it != args.end(); ++it) {
-      totalLen += strlen(*it) + 1;
+      total_len += strlen(*it) + 1;
     }
-    argv_ = static_cast<char**>(malloc(nrArgs * sizeof(char*)));
-    argv_[0] = static_cast<char*>(malloc(totalLen));
+    argv_ = static_cast<char**>(malloc(nr_args_ * sizeof(char*)));
+    argv_[0] = static_cast<char*>(malloc(total_len));
     int i = 0;
     int offset = 0;
     for (auto it = args.begin(); it != args.end(); ++it, ++i) {
@@ -60,36 +40,106 @@ struct Argv {
     free(argv_);
   }
 
-  char** operator *() const {
+  int nr_args() const {
+    return nr_args_;
+  }
+
+  char** operator*() const {
     return argv_;
   }
 
  private:
   char** argv_;
+  int nr_args_;
 };
+
+using ArrayBufferUniquePtr = std::unique_ptr<node::ArrayBufferAllocator,
+      decltype(&node::FreeArrayBufferAllocator)>;
+using TracingAgentUniquePtr = std::unique_ptr<node::tracing::Agent>;
+using NodePlatformUniquePtr = std::unique_ptr<node::NodePlatform>;
 
 class NodeTestFixture : public ::testing::Test {
  protected:
-  v8::Isolate::CreateParams params_;
-  ArrayBufferAllocator allocator_;
+  static ArrayBufferUniquePtr allocator;
+  static TracingAgentUniquePtr tracing_agent;
+  static NodePlatformUniquePtr platform;
+  static uv_loop_t current_loop;
   v8::Isolate* isolate_;
 
-  virtual void SetUp() {
-    platform_ = v8::platform::CreateDefaultPlatform();
-    v8::V8::InitializePlatform(platform_);
+  static void SetUpTestCase() {
+    tracing_agent.reset(new node::tracing::Agent());
+    node::tracing::TraceEventHelper::SetAgent(tracing_agent.get());
+    CHECK_EQ(0, uv_loop_init(&current_loop));
+    platform.reset(static_cast<node::NodePlatform*>(
+          node::InitializeV8Platform(4)));
     v8::V8::Initialize();
-    params_.array_buffer_allocator = &allocator_;
-    isolate_ = v8::Isolate::New(params_);
+  }
+
+  static void TearDownTestCase() {
+    platform->Shutdown();
+    while (uv_loop_alive(&current_loop)) {
+      uv_run(&current_loop, UV_RUN_ONCE);
+    }
+    v8::V8::ShutdownPlatform();
+    CHECK_EQ(0, uv_loop_close(&current_loop));
+  }
+
+  virtual void SetUp() {
+    allocator = ArrayBufferUniquePtr(node::CreateArrayBufferAllocator(),
+                                     &node::FreeArrayBufferAllocator);
+    isolate_ = NewIsolate(allocator.get(), &current_loop);
+    CHECK_NE(isolate_, nullptr);
   }
 
   virtual void TearDown() {
-    v8::V8::ShutdownPlatform();
-    delete platform_;
-    platform_ = nullptr;
+    isolate_->Dispose();
+    platform->UnregisterIsolate(isolate_);
+    isolate_ = nullptr;
   }
+};
 
- private:
-  v8::Platform* platform_;
+
+class EnvironmentTestFixture : public NodeTestFixture {
+ public:
+  class Env {
+   public:
+    Env(const v8::HandleScope& handle_scope, const Argv& argv) {
+      auto isolate = handle_scope.GetIsolate();
+      context_ = node::NewContext(isolate);
+      CHECK(!context_.IsEmpty());
+      context_->Enter();
+
+      isolate_data_ = node::CreateIsolateData(isolate,
+                                              &NodeTestFixture::current_loop,
+                                              platform.get());
+      CHECK_NE(nullptr, isolate_data_);
+      environment_ = node::CreateEnvironment(isolate_data_,
+                                             context_,
+                                             1, *argv,
+                                             argv.nr_args(), *argv);
+      CHECK_NE(nullptr, environment_);
+    }
+
+    ~Env() {
+      node::FreeEnvironment(environment_);
+      node::FreeIsolateData(isolate_data_);
+      context_->Exit();
+    }
+
+    node::Environment* operator*() const {
+      return environment_;
+    }
+
+    v8::Local<v8::Context> context()  const {
+      return context_;
+    }
+
+   private:
+    v8::Local<v8::Context> context_;
+    node::IsolateData* isolate_data_;
+    node::Environment* environment_;
+    DISALLOW_COPY_AND_ASSIGN(Env);
+  };
 };
 
 #endif  // TEST_CCTEST_NODE_TEST_FIXTURE_H_
